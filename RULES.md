@@ -40,7 +40,7 @@ Hype nai, fake confidence nai. Bhul hoile admit ("amar fixture-i vul chilo"). Ag
 
 ## NEXT STEPS (ekhon ki korte hobe — drive README-te-o ache)
 1. **Phase F daily**: snapshot → corrected entryHit → D4 ML → push drive.
-2. **App PR #4** (APP-001 grade chip + SignalHero) — verified, **merge pending** (user).
+2. **App PR #4** (APP-001 grade chip + SignalHero) — **MERGED + LIVE** (2026-08-09, main `af9bf22`).
 3. **Cloudflare token rotation** — `cfut_pTef5...` revoke/recreate (user).
 4. **Deriv demo integration** — on hold, user decision (digital options vs CFD).
 5. **Custom Alerts (F09)** — worker-side PR (future, flag chaile).

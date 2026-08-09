@@ -34,7 +34,7 @@
 
 ### App (Ftt-app-002) — `app/`
 - Modular refactor (`3d2e876`) — App.tsx 1911→486 lines.
-- PR#4 (APP-001 grade chip + SignalHero cleanup) — verified, merge pending.
+- PR#4 (APP-001 grade chip + SignalHero cleanup) — **MERGED + LIVE** (2026-08-09).
 
 ### Bot (ftt-telegram-bot) — `bot/`
 - Premium v4.3 + Arena hub menu (PR#3).
