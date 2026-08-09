@@ -7,8 +7,8 @@
 ## RULE 1 — Drive repo = source of truth
 `Workplace-drive-` (https://github.com/ferdausfs/Workplace-drive-) holds **sob kichu**: 4 project code snapshots, Phase F data, scripts, reports, prompts, bundles, runbook. Kono file/knowledge shudhu local-e thakbe na.
 
-## RULE 2 — Proti ta kaj drive-te push hobe
-Jekono kaj (snapshot, analysis, report, script, prompt, bundle, kono file) → `Workplace-drive-` repo-te push. Daily: `bash scripts/daily-push.sh` (snapshot → analysis → report → push auto).
+## RULE 2 — Proti ta kaj drive-te push hobe (AGAGE)
+Jekono repo-te (worker/app/bot/my-zakat) kono kaj korle — update/result/report/change aslei — **age drive (`Workplace-drive-`) te update koro, tarpor kaj aage**. Snapshot, analysis, report, script, prompt, bundle, kono file → drive-te push. Daily: `bash scripts/daily-push.sh` (snapshot → analysis → report → push auto).
 
 ## RULE 3 — Context check proti turn
 Arena main agent **proti turn-e drive repo check korbe** (`git pull` / API list):
