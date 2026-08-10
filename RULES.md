@@ -7,8 +7,14 @@
 ## RULE 1 — Drive repo = source of truth
 `Workplace-drive-` (https://github.com/ferdausfs/Workplace-drive-) holds **sob kichu**: 4 project code snapshots, Phase F data, scripts, reports, prompts, bundles, runbook. Kono file/knowledge shudhu local-e thakbe na.
 
-## RULE 2 — Proti ta kaj drive-te push hobe (AGAGE)
-Jekono repo-te (worker/app/bot/my-zakat) kono kaj korle — update/result/report/change aslei — **age drive (`Workplace-drive-`) te update koro, tarpor kaj aage**. Snapshot, analysis, report, script, prompt, bundle, kono file → drive-te push. Daily: `bash scripts/daily-push.sh` (snapshot → analysis → report → push auto).
+## RULE 2 — Proti ta kaj drive-te push hobe (AGAGE) — SAB AGENT-ER JONNO
+**Ei rule shudhu Arena main agent-r jonno na — PROTITA agent (worker/app/bot/analysis) er jonno BINDING.** Jekono repo-te kono kaj korle — update/result/report/change/PR/analysis aslei — **age drive (`Workplace-drive-`) te update koro, tarpor kaj aage**. Snapshot, analysis, report, script, prompt, bundle, kono file → drive-te push. Daily: `bash scripts/daily-push.sh` (snapshot → analysis → report → push auto).
+
+**File + Command niyom (push ba update korte hole):**
+- Main agent **file + command shoho debe** (heredoc/direct), user shudhu paste + run korbe.
+- User push korar por main agent **drive pull kore verify korbe** (file asche kina + content thik kina).
+- Kono file drive-te na gele → **context miss** → oita push kore kaj aage.
+- Agent jodi kichu push kore thakeo main agent nije verify kore — blind trust nai (RULE-5).
 
 ## RULE 3 — Context check proti turn
 Arena main agent **proti turn-e drive repo check korbe** (`git pull` / API list):
