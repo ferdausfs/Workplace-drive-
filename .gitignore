@@ -1,0 +1,4 @@
+# Extracted daily snapshots (source archives live in data/ — RULE-2)
+phase_f_forward/
+__pycache__/
+*.pyc
