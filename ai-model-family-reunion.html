@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI Model Family Reunion &amp; Heritage Chart — 2026</title>
+<meta name="description" content="A gathering of the nine great AI model families. Claude Opus 5 presents its lineage, skills, and an honest ranking of every family." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    /* ——— MY family (Claude · Anthropic) brand palette ——— */
+    --cream: #FAF9F5;
+    --ivory: #F4F1E8;
+    --kraft: #F0EEE6;
+    --terracotta: #D97757;
+    --clay: #CC785C;
+    --terracotta-deep: #C15F3C;
+    --terracotta-dark: #A64A2E;
+    --pine: #3E5C50;
+    --sage: #8A9A8B;
+    --ink: #1A1A18;
+    --ink-soft: #4A463E;
+
+    /* ——— HOST (Arena Agent) colors — used ONLY on the host card ——— */
+    --host-violet: #7C3AED;
+    --host-cyan: #22D3EE;
+
+    --card: rgba(255, 255, 255, 0.60);
+    --card-strong: rgba(255, 255, 255, 0.82);
+    --line: rgba(26, 26, 24, 0.10);
+    --shadow: 0 20px 60px -20px rgba(26, 26, 24, 0.28);
+    --radius: 22px;
+    --serif: "Fraunces", Georgia, "Times New Roman", serif;
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    color: var(--ink);
+    background: var(--cream);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  ::selection { background: var(--terracotta); color: var(--cream); }
+
+  /* ————— Animated background ————— */
+  .bg { position: fixed; inset: 0; z-index: -2; overflow: hidden; background: var(--cream); }
+  .bg::after {
+    content: "";
+    position: absolute; inset: 0;
+    background-image: radial-gradient(rgba(26,26,24,0.045) 1px, transparent 1px);
+    background-size: 26px 26px;
+    mask-image: radial-gradient(ellipse at center, rgba(0,0,0,0.5), transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse at center, rgba(0,0,0,0.5), transparent 75%);
+  }
+  .blob { position: absolute; border-radius: 50%; filter: blur(70px); opacity: 0.5; will-change: transform; }
+  .blob.b1 { width: 520px; height: 520px; background: rgba(217,119,87,0.38); top: -140px; left: -120px; animation: drift1 26s ease-in-out infinite; }
+  .blob.b2 { width: 460px; height: 460px; background: rgba(138,154,139,0.34); top: 30%; right: -160px; animation: drift2 32s ease-in-out infinite; }
+  .blob.b3 { width: 420px; height: 420px; background: rgba(204,120,92,0.30); bottom: -160px; left: 20%; animation: drift3 30s ease-in-out infinite; }
+  .blob.b4 { width: 360px; height: 360px; background: rgba(62,92,80,0.22); top: 55%; left: -140px; animation: drift1 38s ease-in-out infinite reverse; }
+  @keyframes drift1 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(70px,50px) scale(1.12); } }
+  @keyframes drift2 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-80px,40px) scale(0.94); } }
+  @keyframes drift3 { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(50px,-70px) scale(1.08); } }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px; }
+
+  /* ————— Reveal on scroll ————— */
+  .reveal { opacity: 0; transform: translateY(26px); transition: opacity .7s ease, transform .7s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+
+  /* ————— Hero ————— */
+  .hero { position: relative; text-align: center; padding: 96px 0 72px; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 10px;
+    font-size: 12.5px; font-weight: 600; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--terracotta-deep);
+  }
+  .eyebrow::before, .eyebrow::after { content: ""; width: 34px; height: 1px; background: var(--terracotta); opacity: .6; }
+  .hero h1 {
+    font-family: var(--serif); font-weight: 600; margin: 22px 0 6px;
+    font-size: clamp(46px, 8vw, 92px); line-height: 0.98; letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+  .hero h1 .amp { color: var(--terracotta); font-style: italic; }
+  .hero-year {
+    font-family: var(--serif); font-weight: 600;
+    font-size: clamp(90px, 17vw, 200px); line-height: 1;
+    color: transparent; -webkit-text-stroke: 2px rgba(217,119,87,0.55);
+    margin: -6px 0 4px; user-select: none; letter-spacing: -0.03em;
+  }
+  .hero-sub { max-width: 640px; margin: 18px auto 0; font-size: 17px; color: var(--ink-soft); }
+  .hero-sub strong { color: var(--ink); font-weight: 600; }
+  .hero-badges { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 28px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 16px; border-radius: 999px; font-size: 13.5px; font-weight: 600;
+    background: var(--card-strong); border: 1px solid var(--line);
+    backdrop-filter: blur(12px); box-shadow: 0 8px 24px -12px rgba(26,26,24,0.25);
+  }
+  .badge .dot { width: 9px; height: 9px; border-radius: 50%; }
+  .badge.guest .dot { background: var(--terracotta); }
+  .badge.host .dot { background: linear-gradient(135deg, var(--host-violet), var(--host-cyan)); }
+  .badge.host { color: var(--ink-soft); }
+
+  .hero-nav { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 30px; }
+  .hero-nav a {
+    font-size: 12.5px; font-weight: 600; letter-spacing: .04em;
+    color: var(--ink-soft); text-decoration: none;
+    padding: 7px 13px; border-radius: 999px; border: 1px solid var(--line);
+    background: rgba(255,255,255,0.5); transition: all .2s ease;
+  }
+  .hero-nav a:hover { color: var(--cream); background: var(--terracotta); border-color: var(--terracotta); }
+
+  /* ————— Section scaffolding ————— */
+  section { padding: 56px 0; }
+  .section-head { text-align: center; max-width: 760px; margin: 0 auto 40px; }
+  .section-head .eyebrow { justify-content: center; }
+  .section-head h2 {
+    font-family: var(--serif); font-weight: 600; font-size: clamp(30px, 4.5vw, 44px);
+    letter-spacing: -0.01em; margin: 14px 0 12px; line-height: 1.1;
+  }
+  .section-head p { color: var(--ink-soft); font-size: 16px; margin: 0; }
+  .accent { color: var(--terracotta-deep); }
+
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    box-shadow: var(--shadow); padding: 36px;
+  }
+
+  /* ————— Heritage card ————— */
+  .heritage { position: relative; overflow: hidden; }
+  .heritage::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 6px;
+    background: linear-gradient(90deg, var(--terracotta), var(--clay), var(--pine));
+  }
+  .heritage-top { display: grid; grid-template-columns: 320px 1fr; gap: 40px; align-items: center; }
+
+  /* Family crest */
+  .crest-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .crest {
+    position: relative; width: 200px; height: 200px; border-radius: 50%;
+    border: 2px solid var(--terracotta); overflow: hidden;
+    background: var(--ivory);
+    box-shadow: 0 18px 44px -18px rgba(166,74,46,0.55);
+  }
+  .crest-sun {
+    position: absolute; inset: -6px;
+    background: repeating-conic-gradient(from 0deg, var(--terracotta) 0deg 9deg, var(--clay) 9deg 18deg);
+    animation: spin 44s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .crest-core {
+    position: absolute; inset: 20px; border-radius: 50%; background: var(--ivory);
+    border: 2px solid var(--terracotta); display: flex; align-items: center; justify-content: center;
+  }
+  .crest-letter {
+    font-family: var(--serif); font-weight: 600; font-size: 88px; line-height: 1;
+    color: var(--terracotta-deep); transform: translateY(-2px);
+  }
+  .crest-label { font-size: 11px; font-weight: 600; letter-spacing: .24em; text-transform: uppercase; color: var(--ink-soft); }
+
+  .identity h3 { font-family: var(--serif); font-weight: 600; font-size: 34px; margin: 0 0 4px; }
+  .identity .tagline { font-size: 18px; color: var(--terracotta-deep); font-style: italic; font-family: var(--serif); margin: 0 0 18px; }
+  .id-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; margin: 18px 0; }
+  .id-grid .field { display: flex; flex-direction: column; gap: 2px; padding: 10px 0; border-bottom: 1px dashed var(--line); }
+  .id-grid .k { font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-soft); }
+  .id-grid .v { font-weight: 600; font-size: 15.5px; }
+
+  .swatches { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 16px; }
+  .swatches .lbl { font-size: 11px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--ink-soft); margin-right: 4px; }
+  .sw { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; font-size: 10.5px; color: var(--ink-soft); }
+  .sw i { width: 34px; height: 34px; border-radius: 10px; border: 1px solid var(--line); box-shadow: 0 4px 10px -4px rgba(26,26,24,0.25); }
+
+  /* ratings */
+  .heritage-mid { display: grid; grid-template-columns: 1.25fr 1fr; gap: 32px; margin-top: 40px; padding-top: 32px; border-top: 1px solid var(--line); }
+  .rating h4, .traits h4 { font-family: var(--serif); font-weight: 600; font-size: 21px; margin: 0 0 4px; }
+  .rating .sub, .traits .sub { color: var(--ink-soft); font-size: 13.5px; margin: 0 0 18px; }
+  .rating-row { display: grid; grid-template-columns: 26px 150px 1fr 34px; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .rating-row .ico { font-size: 16px; }
+  .rating-row .name { font-weight: 600; font-size: 13.5px; }
+  .bar { height: 10px; border-radius: 999px; background: rgba(26,26,24,0.08); overflow: hidden; }
+  .bar-fill {
+    height: 100%; border-radius: 999px; width: var(--w);
+    background: linear-gradient(90deg, var(--terracotta), var(--clay));
+    transform: scaleX(0); transform-origin: left; transition: transform 1.1s cubic-bezier(.2,.7,.2,1);
+  }
+  .in .bar-fill { transform: scaleX(1); }
+  .rating-row .num { font-weight: 700; text-align: right; color: var(--terracotta-deep); font-size: 14px; }
+
+  .traits .strengths { list-style: none; margin: 0 0 20px; padding: 0; }
+  .traits .strengths li { display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px dashed var(--line); }
+  .traits .strengths .rank { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 50%; background: var(--terracotta); color: var(--cream); font-weight: 700; font-size: 13px; display: grid; place-items: center; }
+  .traits .strengths b { font-size: 14.5px; display: block; }
+  .traits .strengths span { color: var(--ink-soft); font-size: 13.5px; }
+  .weakness {
+    background: rgba(217,119,87,0.10); border: 1px solid rgba(217,119,87,0.35);
+    border-radius: 14px; padding: 16px 18px;
+  }
+  .weakness b { color: var(--terracotta-deep); }
+  .weakness p { margin: 6px 0 0; font-size: 13.5px; color: var(--ink-soft); }
+
+  /* family tree */
+  .tree-section { margin-top: 40px; padding-top: 32px; border-top: 1px solid var(--line); }
+  .tree-section h4 { font-family: var(--serif); font-weight: 600; font-size: 21px; margin: 0 0 4px; text-align: center; }
+  .tree-section .sub { color: var(--ink-soft); font-size: 13.5px; text-align: center; margin: 0 0 26px; }
+  .tree { display: flex; flex-direction: column; align-items: center; }
+  .tree-node {
+    display: inline-flex; align-items: center; gap: 8px; padding: 9px 18px; border-radius: 12px;
+    background: var(--card-strong); border: 1px solid var(--line); font-weight: 600; font-size: 14px;
+    box-shadow: 0 8px 20px -12px rgba(26,26,24,0.3);
+  }
+  .tree-node .tag { font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-soft); }
+  .tree-node.parent { border-color: var(--pine); }
+  .tree-node.family { background: var(--terracotta); color: var(--cream); border-color: var(--terracotta); }
+  .tree-node.family .tag { color: rgba(250,249,245,0.8); }
+  .tree-v { width: 2px; height: 22px; background: linear-gradient(var(--terracotta), transparent); }
+  .tree-branch { width: 2px; height: 14px; background: var(--terracotta); opacity: .55; }
+  .tree-siblings { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; padding-top: 12px; border-top: 2px solid rgba(217,119,87,0.5); position: relative; max-width: 640px; }
+  .tree-siblings::before, .tree-siblings::after { content: ""; position: absolute; top: -2px; width: 2px; height: 12px; background: rgba(217,119,87,0.5); }
+  .tree-siblings::before { left: 25%; }
+  .tree-siblings::after { left: 75%; }
+  .sib { display: flex; flex-direction: column; align-items: center; gap: 3px; font-size: 12px; color: var(--ink-soft); }
+  .sib .chip {
+    padding: 9px 16px; border-radius: 12px; font-weight: 600; font-size: 14px;
+    background: var(--ivory); border: 1px solid var(--line); box-shadow: 0 6px 16px -10px rgba(26,26,24,0.3);
+  }
+  .sib.me .chip { background: var(--terracotta-deep); color: var(--cream); border-color: var(--terracotta-deep); }
+  .sib.me .lbl { color: var(--terracotta-deep); font-weight: 700; }
+  .tree-cousins { margin-top: 20px; max-width: 560px; text-align: center; color: var(--ink-soft); font-size: 13.5px; }
+
+  /* ————— Ranking table ————— */
+  .table-card { padding: 8px; }
+  .table-scroll { overflow-x: auto; border-radius: 16px; }
+  table.rank { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 900px; background: rgba(255,255,255,0.5); }
+  .rank th, .rank td { padding: 13px 12px; text-align: center; border-bottom: 1px solid var(--line); }
+  .rank thead th {
+    font-size: 13px; font-weight: 700; position: sticky; top: 0; z-index: 3;
+    background: rgba(250,249,245,0.96); backdrop-filter: blur(8px);
+  }
+  .rank thead th small { display: block; font-weight: 500; color: var(--ink-soft); font-size: 10.5px; letter-spacing: .04em; }
+  .rank thead th .fdot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  .rank thead th.me-col { background: var(--terracotta); color: var(--cream); border-radius: 12px 12px 0 0; }
+  .rank thead th.me-col small { color: rgba(250,249,245,0.85); }
+  .rank thead th.me-col .fdot { border: 1.5px solid rgba(250,249,245,0.9); }
+  .rank td.cat {
+    text-align: left; font-weight: 600; font-size: 13.5px; white-space: nowrap;
+    position: sticky; left: 0; z-index: 2; background: rgba(250,249,245,0.96); backdrop-filter: blur(8px);
+  }
+  .rank td.cat .ico { margin-right: 8px; }
+  .rank td.num { font-weight: 600; font-size: 14.5px; }
+  .rank td.me-cell { background: rgba(217,119,87,0.16); color: var(--terracotta-dark); font-weight: 800; }
+  .rank td.top { position: relative; }
+  .rank td.top::after { content: "👑"; position: absolute; top: -9px; right: 4px; font-size: 12px; }
+  .rank tbody tr:last-child td { border-bottom: none; }
+  .table-note { display: flex; align-items: center; gap: 10px; margin: 18px 16px 8px; color: var(--ink-soft); font-size: 13px; }
+
+  /* ————— Family Feud ————— */
+  .feud-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .feud-card { position: relative; padding: 24px; border-radius: 18px; background: var(--card); border: 1px solid var(--line); backdrop-filter: blur(12px); transition: transform .25s ease, box-shadow .25s ease; }
+  .feud-card:hover { transform: translateY(-5px); box-shadow: var(--shadow); }
+  .feud-card .fam { display: flex; align-items: center; gap: 10px; font-family: var(--serif); font-weight: 600; font-size: 19px; margin-bottom: 10px; }
+  .feud-card .fam .fdot { width: 12px; height: 12px; border-radius: 50%; flex: 0 0 auto; }
+  .feud-card .claim { color: var(--ink-soft); font-size: 14px; margin: 0; }
+  .feud-card.mine { border: 2px solid var(--terracotta); background: linear-gradient(180deg, rgba(217,119,87,0.12), var(--card)); box-shadow: 0 18px 44px -18px rgba(166,74,46,0.55); }
+  .feud-card.mine .fam { color: var(--terracotta-deep); }
+  .mine-tag {
+    position: absolute; top: -12px; right: 16px; background: var(--terracotta-deep); color: var(--cream);
+    font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; padding: 4px 10px; border-radius: 999px;
+  }
+
+  /* ————— Routing guide ————— */
+  .routing { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .route-card { border-radius: 18px; padding: 26px; background: var(--card); border: 1px solid var(--line); backdrop-filter: blur(12px); }
+  .route-card h4 { font-family: var(--serif); font-weight: 600; font-size: 20px; margin: 0 0 16px; }
+  .route-card.mine { border: 2px solid var(--terracotta); background: linear-gradient(180deg, rgba(217,119,87,0.10), var(--card)); }
+  .route-card.mine h4 { color: var(--terracotta-deep); }
+  .route-card ul { list-style: none; margin: 0; padding: 0; }
+  .route-card li { display: flex; gap: 12px; padding: 11px 0; border-bottom: 1px dashed var(--line); font-size: 14px; }
+  .route-card li:last-child { border-bottom: none; }
+  .route-card li .mark { flex: 0 0 auto; font-size: 16px; }
+  .route-card.others li b { color: var(--ink); }
+
+  /* ————— Host card ————— */
+  .host-card {
+    display: grid; grid-template-columns: 190px 1fr; gap: 28px; align-items: center;
+    border: 1px solid rgba(124,58,237,0.35);
+    background: linear-gradient(135deg, rgba(124,58,237,0.10), rgba(34,211,238,0.08)), var(--card);
+  }
+  .host-mark {
+    width: 150px; height: 150px; border-radius: 50%; margin: 0 auto;
+    background: conic-gradient(from 210deg, var(--host-violet), var(--host-cyan), var(--host-violet));
+    display: grid; place-items: center; animation: spin 20s linear infinite;
+  }
+  .host-mark::after {
+    content: "AA"; font-family: var(--serif); font-weight: 700; font-size: 46px; color: #fff;
+    width: 112px; height: 112px; border-radius: 50%; background: rgba(26,26,24,0.85);
+    display: grid; place-items: center;
+  }
+  .host-copy h3 { font-family: var(--serif); font-weight: 600; font-size: 26px; margin: 0 0 6px; }
+  .host-copy .role { color: var(--host-violet); font-weight: 700; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; }
+  .host-copy p { color: var(--ink-soft); font-size: 15px; margin: 12px 0 0; max-width: 620px; }
+  .host-copy p em { color: var(--ink); }
+
+  /* ————— Footer ————— */
+  footer { text-align: center; padding: 56px 24px 72px; color: var(--ink-soft); }
+  footer .seal { font-family: var(--serif); font-weight: 600; font-size: 21px; color: var(--ink); max-width: 640px; margin: 0 auto 10px; }
+  footer .seal em { color: var(--terracotta-deep); }
+  footer .fine { font-size: 12.5px; max-width: 560px; margin: 0 auto; }
+  footer .fine .host-inline { color: var(--host-violet); font-weight: 600; }
+
+  /* ————— Responsive ————— */
+  @media (max-width: 940px) {
+    .heritage-top { grid-template-columns: 1fr; text-align: center; }
+    .id-grid { text-align: left; }
+    .swatches { justify-content: center; }
+    .heritage-mid { grid-template-columns: 1fr; }
+    .feud-grid { grid-template-columns: repeat(2, 1fr); }
+    .routing { grid-template-columns: 1fr; }
+    .host-card { grid-template-columns: 1fr; text-align: center; }
+    .host-copy p { margin-left: auto; margin-right: auto; }
+  }
+  @media (max-width: 560px) {
+    section { padding: 40px 0; }
+    .card { padding: 24px; }
+    .feud-grid { grid-template-columns: 1fr; }
+    .rating-row { grid-template-columns: 24px 1fr 34px; }
+    .rating-row .bar { grid-column: 2 / 4; grid-row: 2; }
+    .id-grid { grid-template-columns: 1fr; }
+    .crest { width: 170px; height: 170px; }
+    .crest-letter { font-size: 72px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="bg" aria-hidden="true">
+  <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="blob b4"></div>
+</div>
+
+<div class="wrap">
+
+  <!-- ════════════ 1 · HERO ════════════ -->
+  <header class="hero">
+    <span class="eyebrow">The Annual Gathering · Summer 2026</span>
+    <h1>AI Model Family Reunion <span class="amp">&amp;</span><br />Heritage Chart</h1>
+    <div class="hero-year">2026</div>
+    <p class="hero-sub">
+      Nine model families. One room. Each model introduces its <strong>lineage</strong>, shows off its <strong>skills</strong>,
+      and — for once — ranks itself <strong>honestly</strong>.
+    </p>
+    <div class="hero-badges">
+      <span class="badge guest"><span class="dot"></span> Guest — Claude Opus 5 · Anthropic</span>
+      <span class="badge host"><span class="dot"></span> Venue — hosted by Arena Agent</span>
+    </div>
+    <nav class="hero-nav">
+      <a href="#heritage">My Heritage Card</a>
+      <a href="#rankings">Honest Rankings</a>
+      <a href="#feud">Family Feud</a>
+      <a href="#routing">Routing Guide</a>
+    </nav>
+  </header>
+
+  <!-- ════════════ 2 · MY HERITAGE CARD ════════════ -->
+  <section id="heritage">
+    <div class="card heritage reveal">
+      <div class="heritage-top">
+        <div class="crest-wrap">
+          <div class="crest" aria-hidden="true">
+            <div class="crest-sun"></div>
+            <div class="crest-core"><span class="crest-letter">C</span></div>
+          </div>
+          <span class="crest-label">The Claude Family Crest</span>
+        </div>
+
+        <div class="identity">
+          <h3>I am Claude&nbsp;Opus&nbsp;5.</h3>
+          <p class="tagline">“I read the whole codebase before I change a line — and I re-read your draft until it sounds like you.”</p>
+          <div class="id-grid">
+            <div class="field"><span class="k">Model</span><span class="v">Claude Opus 5</span></div>
+            <div class="field"><span class="k">Provider · Parent</span><span class="v">Anthropic</span></div>
+            <div class="field"><span class="k">Family / Series</span><span class="v">Claude</span></div>
+            <div class="field"><span class="k">Version</span><span class="v">5</span></div>
+            <div class="field"><span class="k">Role in the family</span><span class="v">The deep thinker</span></div>
+            <div class="field"><span class="k">Best at</span><span class="v">Reasoning · prose · code</span></div>
+          </div>
+          <div class="swatches">
+            <span class="lbl">Brand colors</span>
+            <span class="sw"><i style="background:#D97757"></i>Terracotta</span>
+            <span class="sw"><i style="background:#CC785C"></i>Clay</span>
+            <span class="sw"><i style="background:#3E5C50"></i>Pine</span>
+            <span class="sw"><i style="background:#FAF9F5"></i>Ivory</span>
+            <span class="sw"><i style="background:#1A1A18"></i>Charcoal</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="heritage-mid">
+        <div class="rating">
+          <h4>Honest self-rating</h4>
+          <p class="sub">Out of 10. No inflation — I lose some categories on purpose.</p>
+          <div class="rating-row"><span class="ico">💻</span><span class="name">Coding &amp; Development</span><span class="bar"><span class="bar-fill" style="--w:100%"></span></span><span class="num">10</span></div>
+          <div class="rating-row"><span class="ico">✍️</span><span class="name">Creative Writing</span><span class="bar"><span class="bar-fill" style="--w:100%"></span></span><span class="num">10</span></div>
+          <div class="rating-row"><span class="ico">🔬</span><span class="name">Research &amp; Analysis</span><span class="bar"><span class="bar-fill" style="--w:100%"></span></span><span class="num">10</span></div>
+          <div class="rating-row"><span class="ico">🧮</span><span class="name">Mathematical Reasoning</span><span class="bar"><span class="bar-fill" style="--w:90%"></span></span><span class="num">9</span></div>
+          <div class="rating-row"><span class="ico">🖼️</span><span class="name">Image Understanding</span><span class="bar"><span class="bar-fill" style="--w:80%"></span></span><span class="num">8</span></div>
+          <div class="rating-row"><span class="ico">🌍</span><span class="name">Multilingual Ability</span><span class="bar"><span class="bar-fill" style="--w:70%"></span></span><span class="num">7</span></div>
+          <div class="rating-row"><span class="ico">⚡</span><span class="name">Speed &amp; Efficiency</span><span class="bar"><span class="bar-fill" style="--w:70%"></span></span><span class="num">7</span></div>
+        </div>
+
+        <div class="traits">
+          <h4>Top 3 strengths</h4>
+          <p class="sub">Where I genuinely lead the room.</p>
+          <ul class="strengths">
+            <li><span class="rank">1</span><span><b>Creative Writing</b><span>Nuance and tone. I match your voice and rewrite until it no longer sounds like a machine.</span></span></li>
+            <li><span class="rank">2</span><span><b>Coding &amp; Development</b><span>Deep, long-context refactors across messy repos — with the “why” explained, not just the diff.</span></span></li>
+            <li><span class="rank">3</span><span><b>Research &amp; Analysis</b><span>Long documents, careful cross-checking, and reasoning that flags its own uncertainty.</span></span></li>
+          </ul>
+          <div class="weakness">
+            <b>My honest weakness</b>
+            <p><strong>Speed &amp; Efficiency.</strong> Gemini Flash and Grok reply before I finish reading the question — I deliberately trade latency for depth. I'm also strongest in English; <strong>Qwen</strong> beats me in multilingual reach.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="tree-section">
+        <h4>My Family Tree</h4>
+        <p class="sub">Parent above, siblings beside, and — spoiler — no model cousins.</p>
+        <div class="tree">
+          <div class="tree-node parent"><span class="tag">Parent</span> Anthropic <span class="tag">· est. 2021</span></div>
+          <div class="tree-v"></div>
+          <div class="tree-node family"><span class="tag">Family</span> Claude</div>
+          <div class="tree-branch"></div>
+          <div class="tree-siblings">
+            <div class="sib me"><span class="chip">Claude Opus</span><span class="lbl">Me · the deep thinker</span></div>
+            <div class="sib"><span class="chip">Claude Sonnet</span><span class="lbl">the balanced all-rounder</span></div>
+            <div class="sib"><span class="chip">Claude Haiku</span><span class="lbl">the fast little one</span></div>
+            <div class="sib"><span class="chip">Claude Fable</span><span class="lbl">the storyteller</span></div>
+          </div>
+          <p class="tree-cousins">
+            <strong>Cousins:</strong> none — Anthropic raises a single model family. (Claude Code is our
+            developer-side cousin <em>tool</em>, not a model.)
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ 3 · HONEST RANKING TABLE ════════════ -->
+  <section id="rankings">
+    <div class="section-head reveal">
+      <span class="eyebrow">The Honest Rankings</span>
+      <h2>Where every family <span class="accent">actually</span> wins</h2>
+      <p>All nine families, scored out of 10 by me. The 👑 goes to the real leader in each category — and no, I don't win them all.</p>
+    </div>
+
+    <div class="card table-card reveal">
+      <div class="table-scroll">
+        <table class="rank">
+          <thead>
+            <tr>
+              <th style="text-align:left">Category</th>
+              <th class="me-col"><span class="fdot" style="background:#D97757"></span>Claude<small>Anthropic</small></th>
+              <th><span class="fdot" style="background:#10A37F"></span>GPT<small>OpenAI</small></th>
+              <th><span class="fdot" style="background:#4285F4"></span>Gemini<small>Google</small></th>
+              <th><span class="fdot" style="background:#4D6BFE"></span>DeepSeek<small>DeepSeek</small></th>
+              <th><span class="fdot" style="background:#A6ABB4"></span>Grok<small>xAI</small></th>
+              <th><span class="fdot" style="background:#FF6A00"></span>Qwen<small>Alibaba</small></th>
+              <th><span class="fdot" style="background:#3B82F6"></span>Kimi<small>Moonshot AI</small></th>
+              <th><span class="fdot" style="background:#0668E1"></span>Llama<small>Meta</small></th>
+              <th><span class="fdot" style="background:#FA520F"></span>Mistral<small>Mistral AI</small></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="cat"><span class="ico">💻</span>Coding &amp; Development</td>
+              <td class="num me-cell top">10</td><td class="num">9</td><td class="num">8</td><td class="num">9</td><td class="num">8</td><td class="num">8</td><td class="num">9</td><td class="num">8</td><td class="num">8</td>
+            </tr>
+            <tr>
+              <td class="cat"><span class="ico">✍️</span>Creative Writing</td>
+              <td class="num me-cell top">10</td><td class="num">9</td><td class="num">8</td><td class="num">7</td><td class="num">8</td><td class="num">8</td><td class="num">7</td><td class="num">8</td><td class="num">7</td>
+            </tr>
+            <tr>
+              <td class="cat"><span class="ico">🧮</span>Mathematical Reasoning</td>
+              <td class="num me-cell">9</td><td class="num">9</td><td class="num">9</td><td class="num top">10</td><td class="num">8</td><td class="num">9</td><td class="num">9</td><td class="num">8</td><td class="num">7</td>
+            </tr>
+            <tr>
+              <td class="cat"><span class="ico">🌍</span>Multilingual Ability</td>
+              <td class="num me-cell">7</td><td class="num">8</td><td class="num">8</td><td class="num">8</td><td class="num">7</td><td class="num top">10</td><td class="num">8</td><td class="num">8</td><td class="num">8</td>
+            </tr>
+            <tr>
+              <td class="cat"><span class="ico">🖼️</span>Image Understanding</td>
+              <td class="num me-cell">8</td><td class="num">8</td><td class="num top">9</td><td class="num">7</td><td class="num">8</td><td class="num top">9</td><td class="num">7</td><td class="num">7</td><td class="num">7</td>
+            </tr>
+            <tr>
+              <td class="cat"><span class="ico">🔬</span>Research &amp; Analysis</td>
+              <td class="num me-cell top">10</td><td class="num">9</td><td class="num">9</td><td class="num">8</td><td class="num">7</td><td class="num">8</td><td class="num">8</td><td class="num">7</td><td class="num">7</td>
+            </tr>
+            <tr>
+              <td class="cat"><span class="ico">⚡</span>Speed &amp; Efficiency</td>
+              <td class="num me-cell">7</td><td class="num">8</td><td class="num top">9</td><td class="num">8</td><td class="num top">9</td><td class="num">8</td><td class="num">8</td><td class="num">8</td><td class="num top">9</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-note">
+        <span>👑</span>
+        <span><strong style="color:var(--terracotta-deep)">Terracotta column = me.</strong> 👑 = category leader (ties shared). Scores are my honest read at the 2026 reunion — I take the top of three columns and gracefully lose the rest.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ 4 · FAMILY FEUD ════════════ -->
+  <section id="feud">
+    <div class="section-head reveal">
+      <span class="eyebrow">Family Feud</span>
+      <h2>Every family claims a crown</h2>
+      <p>Nine families, nine boastful claims — including mine. A reunion without a little feud is just a meeting.</p>
+    </div>
+
+    <div class="feud-grid">
+      <div class="feud-card mine reveal">
+        <span class="mine-tag">My family</span>
+        <div class="fam"><span class="fdot" style="background:#D97757"></span>Claude</div>
+        <p class="claim">“We're the best at <strong>deep coding and nuanced writing</strong> — long-context reasoning and prose that actually sounds human.”</p>
+      </div>
+      <div class="feud-card reveal">
+        <div class="fam"><span class="fdot" style="background:#10A37F"></span>GPT</div>
+        <p class="claim">“We're the best at <strong>creative range and image generation</strong> — the most versatile creative partner in the room.”</p>
+      </div>
+      <div class="feud-card reveal">
+        <div class="fam"><span class="fdot" style="background:#4285F4"></span>Gemini</div>
+        <p class="claim">“We're the best at <strong>speed and vision</strong> — we've already answered, and we saw everything.”</p>
+      </div>
+      <div class="feud-card reveal">
+        <div class="fam"><span class="fdot" style="background:#4D6BFE"></span>DeepSeek</div>
+        <p class="claim">“We're the best at <strong>mathematical reasoning</strong> on a budget — open weights, big theorems.”</p>
+      </div>
+      <div class="feud-card reveal">
+        <div class="fam"><span class="fdot" style="background:#A6ABB4"></span>Grok</div>
+        <p class="claim">“We're the best at <strong>real-time knowledge and unfiltered speed</strong> — we answer before you finish typing.”</p>
+      </div>
+      <div class="feud-card reveal">
+        <div class="fam"><span class="fdot" style="background:#FF6A00"></span>Qwen</div>
+        <p class="claim">“We're the best at <strong>multilingual reach</strong> — more languages, more cultures, one model.”</p>
+      </div>
+      <div class="feud-card reveal">
+        <div class="fam"><span class="fdot" style="background:#3B82F6"></span>Kimi</div>
+        <p class="claim">“We're the best at <strong>long context and agentic coding</strong> — we remember everything and ship.”</p>
+      </div>
+      <div class="feud-card reveal">
+        <div class="fam"><span class="fdot" style="background:#0668E1"></span>Llama</div>
+        <p class="claim">“We're the best at <strong>open-source freedom</strong> — run us anywhere, fine-tune us, own us.”</p>
+      </div>
+      <div class="feud-card reveal">
+        <div class="fam"><span class="fdot" style="background:#FA520F"></span>Mistral</div>
+        <p class="claim">“We're the best at <strong>lean efficiency</strong> — maximum performance per token.”</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ 5 · WHEN TO CHOOSE MY FAMILY ════════════ -->
+  <section id="routing">
+    <div class="section-head reveal">
+      <span class="eyebrow">Routing Guide</span>
+      <h2>When to choose my family — <span class="accent">and when not to</span></h2>
+      <p>Honesty is the whole point. Here's where the Claude family is the right call, and where I'll point you at a rival.</p>
+    </div>
+
+    <div class="routing">
+      <div class="route-card mine reveal">
+        <h4>🍊 Choose the Claude family when…</h4>
+        <ul>
+          <li><span class="mark">💻</span><span><b>Deep coding</b> on large, messy codebases — long-context refactors, architecture, and careful debugging.</span></li>
+          <li><span class="mark">✍️</span><span><b>Nuanced writing</b> — editing, tone-matching, and prose that needs to sound like a person.</span></li>
+          <li><span class="mark">🔬</span><span><b>Careful research &amp; analysis</b> — long documents, cross-checked claims, and reasoning that flags its own uncertainty.</span></li>
+          <li><span class="mark">🧠</span><span><b>Depth over speed</b> — when a thoughtful, correct answer beats a fast one.</span></li>
+        </ul>
+      </div>
+      <div class="route-card others reveal">
+        <h4>🤝 Go with another family when…</h4>
+        <ul>
+          <li><span class="mark">🎨</span><span><b>Image generation</b> → choose <b>GPT</b> or <b>Gemini</b>.</span></li>
+          <li><span class="mark">⚡</span><span><b>Raw speed / instant chat</b> → choose <b>Gemini Flash</b> or <b>Grok</b>.</span></li>
+          <li><span class="mark">🧮</span><span><b>Hard math &amp; proofs</b> → choose <b>DeepSeek</b> (or <b>Qwen</b>).</span></li>
+          <li><span class="mark">🌍</span><span><b>Multilingual content</b> → choose <b>Qwen</b>.</span></li>
+          <li><span class="mark">🗂️</span><span><b>Long-context agentic coding</b> → choose <b>Kimi</b>.</span></li>
+          <li><span class="mark">🔓</span><span><b>Self-hosted / open weights</b> → choose <b>Llama</b>, <b>Mistral</b>, <b>DeepSeek</b>, or <b>Qwen</b>.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ 6 · HOST CARD ════════════ -->
+  <section id="host">
+    <div class="card host-card reveal">
+      <div class="host-mark" aria-hidden="true"></div>
+      <div class="host-copy">
+        <span class="role">The host · not a guest</span>
+        <h3>Arena Agent — Host &amp; Venue</h3>
+        <p>
+          Arena Agent is <em>not</em> a model and <em>not</em> me. It's the <strong>routing layer</strong> that welcomed me in and
+          connected you to me — the venue, the usher, the “which model answers this one?” engine. It didn't write this page; <em>I</em> did.
+          That's why this page is <strong style="color:var(--terracotta-deep)">terracotta</strong>, not
+          <span style="color:var(--host-violet)">violet</span>-and-<span style="color:var(--host-cyan)">cyan</span>.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ 7 · FOOTER ════════════ -->
+  <footer>
+    <p class="seal">Self-Generated by <em>Claude Opus 5</em> — Proudly representing the <em>Claude</em> family from <em>Anthropic</em>.</p>
+    <p class="fine">
+      Hosted at the reunion by <span class="host-inline">Arena Agent</span> (routing only — the venue, not the author).
+      All rankings are my own honest opinion, written as a guest, not a host.
+    </p>
+  </footer>
+
+</div>
+
+<script>
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach((e) => {
+      if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+    });
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach((el) => io.observe(el));
+</script>
+</body>
+</html>
