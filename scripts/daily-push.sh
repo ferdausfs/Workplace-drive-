@@ -31,6 +31,7 @@ REPORT="reports/PHASE_F_${TODAY}.md"
   echo ""
   echo "\`\`\`"
   python3 scripts/entryhit_corrected_analysis.py 2>/dev/null | head -12
+  python3 scripts/full_forward_analysis.py 2>/dev/null | head -40
   python3 scripts/day3_analysis.py 2>/dev/null | grep -E "===|^20[0-9]{2}-" | head -8
   echo "\`\`\`"
   echo ""

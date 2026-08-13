@@ -1,5 +1,161 @@
 # Ftt-Otc-v6 — Agent Log
 
+## 2026-08-12 — DEPLOY SCRIPT SILENT-FAIL FIX + v6.10.1 LANDS IN WORKER REPO
+
+**Task A:** the v6.10.1 patch (ftt-telegram-bot PR #12, `patches/v6101-push-silent-death.patch`,
+885 lines) applied verbatim onto main `3df5f1a` and shipped as a worker-repo PR.
+One additive field on top: `/health.push.delivered24h` now mirrors the durable
+`push:delivered24h` KV counter (previously only reachable as
+`phase10.pushesLast24h`), so the live verify reads `push.delivered24h` directly.
+Pins: fix_tests T43i/T43j (302 → 304).
+
+**Task B:** `redeploy.sh` (Termux → Cloudflare direct PUT) died with a bare
+`json.JSONDecodeError` after printing "Uploading worker-v6101-20260812.js +
+triggers..." — it piped curl stdout straight into `json.load()`. A
+`JSONDecodeError` means the response body was empty or not JSON; the four
+candidate causes and the fixes now in `scripts/redeploy.sh`:
+
+| # | Cause | Fix in script |
+|---|---|---|
+| 1 | Bundle missing / zero-size (failed download) → curl exit 26, **empty stdout** → JSONDecodeError. Most consistent with the observed failure. | Preflight: file must exist, be non-empty (`wc -c` printed), optional `EXPECTED_BYTES=322007` exact compare; JS-content sniff. Fails BEFORE curl runs. |
+| 2 | Cloudflare 429 / edge error page (HTML/text, not JSON). | Every call captures `%{http_code}` + raw body; body is printed verbatim BEFORE any JSON parse; 429 exits with a Retry-After hint. |
+| 3 | `wmeta.json` `main_module` ≠ uploaded bundle name (sed rename missed it) → Cloudflare 4xx JSON error, previously hidden. | Metadata is validated: parses as JSON AND `main_module == basename(bundle)`, else the exact python fix is printed; `--fix-metadata` regenerates. Upload part name is pinned to `main_module`. |
+| 4 | Unquoted `-F` breaking multipart on special chars. | All `-F` args fully quoted. |
+
+All API failures now print HTTP status + raw body + parsed Cloudflare
+`errors[].code/message` and exit non-zero — no more silent JSONDecodeError.
+Post-deploy the script GETs `/health` and prints `version`, `push.enabled`,
+`push.tokenValid` (+`tokenUsername`), `push.noTokenReason`, subscriber count,
+`lastAttempt`, `delivered24h`; non-6.10.1 or `tokenValid:false` exits non-zero
+with the `wrangler secret put BOT_TOKEN --name fttotcv6` remediation.
+
+Verified locally against a mock Cloudflare API: happy path (upload + schedules
++ health verify → rc 0), 429 HTML (raw shown), 200-with-text-body (flagged
+non-JSON), `success:false` (code 10006 parsed + shown), missing/zero/wrong-size
+bundle (preflight), main_module mismatch (exact fix printed). The sandbox
+cannot reach api.cloudflare.com (SSL_ERROR_SYSCALL) — real deploy runs on
+Termux or via the GitHub Action on merge.
+
+---
+
+## 2026-08-12 — AUTO PUSH STILL SILENT AFTER v6.10 (v6.10.1)
+
+**Base:** `3df5f1a` (main, v6.10.0). Live `/health` at 06:47Z: `pushEnabled:true`,
+`botKvBound:true`, `subscriberCount:1`, `pushesLast24h:0`. Scanner is saving
+(ADA/USD `sig_1786517126427_n1xn9` SELL 85% B pending at 06:45:26, 26s after
+the `*/5` cron) but no `pushLog:*` exists for that pending row.
+
+### Evidence (not guesses)
+1. **BOT_TOKEN is SET** on fttotcv6 (`pushEnabled:true`). Candidate 1 from the
+   prompt (secret missing) is ruled out. The secret may still be the *wrong*
+   bot (getMe was never probed — `/health` only checked `!!BOT_TOKEN`).
+2. **`pushesLast24h` was a lie for resolved signals.** `pushResultToSubscribers`
+   deletes `pushLog:<id>` after the result DM, so a day of successful
+   push+resolve shows `0`. The ADA pending row is the exception that proves
+   the real failure: if that SELL had been delivered, its pushLog would still
+   be open and the counter would be ≥1.
+3. **Lock-on-failed-send (code bug).** `claimPushLock` ran BEFORE
+   `sendTelegramMessage`. A 401/403 (wrong worker token, or a chat that token
+   cannot write) left the 30-min lock held and wrote no pushLog. The next
+   scanner tick returned `skipped:'locked'`. Forever 0 DMs, forever 0 logs.
+4. **Nested waitUntil on the `*/5` scheduled handler.**
+   `scheduled(){ ctx.waitUntil(scheduledScan); return; }` +
+   `handleSignalRaw` → `ctx.waitUntil(saveAndPush)`. Save (fast KV) completed;
+   Telegram send (slower, + optional 8s FX self-fetch) could be frozen when
+   the scan promise resolved. Matches "history grows, pushLog=0".
+
+### Fix (v6.10.1)
+- Release the pushLock if Telegram send fails, so the next tick retries.
+- Persist `push:lastAttempt` on EVERY outcome (no-token / no-match /
+  telegram-fail / locked) with per-subscriber skip reasons.
+- Durable `push:delivered24h` counter that result-push does not delete.
+- `/health.push = {enabled, noTokenReason, tokenValid (getMe), lastAttempt,
+  subscribers[]}` so this class of failure is never silent again.
+- `await scheduledScan` + scanner `awaitPersist:true` so the scheduled
+  isolate cannot drop the push.
+- Harden `auto_users` (numbers / `u:` prefix / `{chatId}` objects) and
+  trim BOT_TOKEN (dashboard paste with a trailing newline → silent 401).
+
+### Tests
+fix_tests **302/0** (was 281; T43 pins lock-release + health + no-token +
+shape hardening) · phase10_integration 19/19 · phase10_smoke 71/0 ·
+phase7 68+36 · d2 39 · probe 34 · eh 7 · fx 20 · r71 **117P/0F**.
+
+### Deploy note
+Rebuild bundle + `bash redeploy.sh`. Then hit `/health` and read
+`push.lastAttempt` + `push.subscribers` + `push.tokenValid`. If
+`tokenValid:false`, set the **worker's** BOT_TOKEN to the same secret the
+bot worker uses (`wrangler secret put BOT_TOKEN --name fttotcv6`).
+
+---
+
+## 2026-08-10 — RESTORE AUTO SIGNAL PUSH (worker = single source; v6.10.0)
+
+**Base:** `bad7140c` (main, incl. PR #15 edge features). 5 files: 4 modified +
+fix_tests. Bot repo untouched (R4). This is the in-repo PR for the fix that was
+previously delivered + verified live via `ftt-telegram-bot` PR #9 (patch
+`patches/restore-auto-signal-push-worker.patch`).
+
+### Root cause (two earlier changes collided)
+1. **F3-14 (BUG-028)** made the `*/5` scanner call `handleSignalRaw(..., { noPush: true })`
+   so scanner runs would not duplicate pushes while the BOT still had its own autoScan.
+2. **Bot v4.5.0** removed autoScan entirely (worker = single source of truth; bot = thin client).
+3. Result: `pushSignalToSubscribers` had exactly ONE call site — `signal.js` `saveAndPush`
+   (`if (!noPush)`) — which only fired on manual HTTP `/api/signal` calls without `nopush`.
+   The scanner saved history rows but never delivered them. **Auto signals never reached
+   Telegram subscribers.** Manual `/signal` still worked (bot → worker → push + display).
+
+### Fix — Option B (simplest correct, chosen)
+Remove `noPush: true` from `scanOnePair` so the scanner rides the SAME `handleSignalRaw`
+→ `saveAndPush` chain the manual path uses. No new push code: `saveAndPush` already
+persists via `saveSignalToHistory` and only pushes when the row is genuinely NEW
+(30-min setup dedup: same pair+direction+nearby entry), and `pushSignalToSubscribers`
+adds `claimPushLock` (30-min TTL per subscriber/pair/direction). The scanner still
+writes only the `latest:` cache — no double save (handleSignalRaw persists; the
+scanner's job of warming the cache is unchanged).
+
+Why not Option A (scanner calls pushSignalToSubscribers directly): it would push on
+every scan of a setup unless the scanner re-implements the history-dedup decision,
+which `saveAndPush` already owns. Option B keeps ONE save+push path for every caller.
+
+### Dedup verification (R2) — scanner ↔ manual cannot double-push
+- Scanner pushes first → manual `/api/signal` for the same setup: history guard returns
+  `{deduped:true}` → no push. Even if a re-poll slips past the entry tolerance,
+  `claimPushLock` (same chatId+pair+direction, 30 min) returns false → skipped 'locked'.
+- Manual pushes first → scanner re-scan: identical reasoning, symmetric.
+- Residual (pre-existing, documented in pushToSubscribers.js header): a genuinely NEW
+  same-direction setup inside the 30-min lock window is not pushed (lock wins over
+  history); KV has no CAS so a true concurrent race could deliver one duplicate. Both
+  bounded, both acceptable per the Phase 10 design.
+
+### SELF_CALIB import conflict (PR #15 nesting) — fixed in this PR
+`bad7140` (main) itself fails `esbuild src/index.js --bundle` with "No matching export
+in src/config.js for import SELF_CALIB" because PR #15 moved `SELF_CALIB` inside
+`CONFIG`. index.js now imports `CONFIG` and derives `const SELF_CALIB = CONFIG.SELF_CALIB`
+→ bundle builds cleanly again.
+
+### Verification — full matrix on this branch
+- `node --check` on all changed files → pass; `esbuild src/index.js --bundle --format=esm --target=es2022` → success.
+- `fix_tests` **281/0** — T27 rewritten from the F3-14 grep contract to a behavioral
+  test: real `scanOnePair` → `handleSignalRaw` → `saveAndPush` → Telegram (network
+  stubbed): fresh tradeable signal pushed exactly once to the matching subscriber;
+  pushLog + pushLock written; history exactly one row (no double save); re-scan of
+  the same setup → NOT re-pushed; manual `/api/signal` after scanner push → NOT
+  re-pushed; manual first, then scanner → NOT re-pushed; call site no longer forces
+  `noPush:true`. (T36c also pinned with `session`/`newsBlock:null` — same convention
+  as T29 — so the suite is invariant to the real-clock trading session and weekly
+  news windows; the old 266/0 baseline only passed outside the Mon-Fri 12:00-13:45
+  UTC news window and the HIGHEST-session overlap.)
+- `phase10_integration` 19/19 · `phase7_integration` 36/0 · `phase7_smoke` 68/0 ·
+  `phase10_smoke` 61/0 · `d2_tests` 39/39 · `probe_tests` 34/34 · `entry_hit_tests` 7/7 ·
+  `fx_mode_tests` 20/20 · `r71_tests` 117P/0F (frozen baseline untouched).
+
+### Deploy note
+Next bundle = `git archive origin/main` → esbuild → deploy (no manual patch needed).
+Live behavior unchanged (already live from the v6.10 bundle built off this same patch).
+
+---
+
 ## 2026-07-29 — Phase 10: real-time cross-surface push (NOT deployed)
 
 **Base:** `24985da` (Phase 7.1). 7 files: 3 modified + wrangler.toml, 1 new module,
