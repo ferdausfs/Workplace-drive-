@@ -1,12 +1,16 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # ════════════════════════════════════════════════════════════════
 #  FTT Termux Restore Script — fresh install → full ecosystem
-#  Run in Termux:  bash termux_restore.sh
+#  Run in Termux:  bash Workplace-drive-/scripts/termux_restore.sh
 #  Date: 2026-08-13
 #  সতর্কতা: এই script token/secret রাখে না (RULE-7)।
 #            Cloudflare + GitHub token আলাদা set করতে হবে।
 # ════════════════════════════════════════════════════════════════
 set -euo pipefail
+
+# Resolve drive repo location (this script lives in scripts/)
+DRIVE="$(cd "$(dirname "$0")/.." && pwd)"
+echo "Drive repo: $DRIVE"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 
@@ -81,22 +85,27 @@ git config --global init.defaultBranch main 2>/dev/null
 log "Git config set"
 
 # ─────────────────────────────────────────────────
-# 4. Clone repos (or update drive repo)
+# 4. Clone repos (or update existing)
 # ─────────────────────────────────────────────────
 step "Step 4/8 — Cloning / updating repos"
 
 clone_or_pull() {
   local dir="$1" url="$2"
   if [ -d "$dir/.git" ]; then
-    cd "$dir" && git pull --ff-only 2>/dev/null && log "$dir updated" || warn "$dir pull failed"
+    cd "$dir" && git pull --ff-only 2>/dev/null && log "$dir updated" || warn "$dir pull failed (may already be up to date)"
     cd ~
   else
-    git clone "$url" "$dir" 2>/dev/null && log "$dir cloned" || err "$dir clone failed (check GitHub auth)"
+    git clone "$url" "$dir" 2>/dev/null && log "$dir cloned" || err "$dir clone failed — check GitHub auth: gh auth login"
   fi
 }
 
-# Main drive repo
-clone_or_pull ~/Workplace-drive- "https://github.com/ferdausfs/Workplace-drive-.git"
+# Main drive repo (already cloned if running this script from it)
+if [ -d "$DRIVE/.git" ]; then
+  log "Drive repo already at $DRIVE"
+else
+  clone_or_pull ~/Workplace-drive- "https://github.com/ferdausfs/Workplace-drive-.git"
+  DRIVE="$HOME/Workplace-drive-"
+fi
 
 # Individual project repos (for dev/test/deploy)
 clone_or_pull ~/Ftt-Otc-v6 "https://github.com/ferdausfs/Ftt-Otc-v6.git"
@@ -109,18 +118,16 @@ clone_or_pull ~/My-zakat "https://github.com/ferdausfs/My-zakat.git"
 # ─────────────────────────────────────────────────
 step "Step 5/8 — Restoring Phase F data"
 
-DRIVE="$HOME/Workplace-drive-"
 mkdir -p ~/phase_f_forward
 
 # Unpack latest data archive from drive
 LATEST_TAR=$(ls -t "$DRIVE/data/"phase_f_forward_*.tar.gz 2>/dev/null | head -1)
 if [ -n "$LATEST_TAR" ]; then
   tar -xzf "$LATEST_TAR" -C ~/ 2>/dev/null && log "Phase F data restored: $(basename "$LATEST_TAR")" || warn "Extract failed"
-  # Show what dates are available
   echo "  Available dates:"
   ls ~/phase_f_forward/ 2>/dev/null | tail -10
 else
-  warn "No data archive found in drive/data/"
+  warn "No data archive found in $DRIVE/data/"
 fi
 
 # ─────────────────────────────────────────────────
@@ -146,9 +153,14 @@ if [ -d ~/ftt-telegram-bot ]; then
   fi
 fi
 
-# Copy analysis scripts to home (convenient)
-cp "$DRIVE/scripts/"*.py ~/ 2>/dev/null && log "Analysis scripts → ~/ (phase_f_snapshot.sh, entryhit, day3, d4...)"
-cp "$DRIVE/scripts/phase_f_snapshot.sh" ~/ 2>/dev/null && log "phase_f_snapshot.sh → ~/"
+# Copy snapshot + analysis scripts to home (convenient for daily use)
+cp "$DRIVE/scripts/phase_f_snapshot.sh" ~/phase_f_snapshot.sh 2>/dev/null && chmod +x ~/phase_f_snapshot.sh && log "phase_f_snapshot.sh → ~/"
+for py in "$DRIVE/scripts/"*.py; do
+  [ -f "$py" ] && cp "$py" ~/ 2>/dev/null
+done && log "Analysis scripts → ~/ (*.py)"
+
+# Create symlink to drive repo scripts as well
+ln -sf "$DRIVE/scripts/daily-push.sh" ~/daily-push.sh 2>/dev/null && log "~/daily-push.sh → drive/scripts/daily-push.sh"
 
 # ─────────────────────────────────────────────────
 # 7. Worker test dependencies (esbuild for r71)
@@ -207,7 +219,10 @@ echo "     1. source ~/.ftt_env   (file edit করে token রাখো)"
 echo "     2. gh auth status      (GitHub check)"
 echo ""
 echo "  🔄 Daily snapshot চালাতে:"
-echo "     cd ~/Workplace-drive- && bash scripts/daily-push.sh"
+echo "     cd $DRIVE && bash scripts/daily-push.sh"
+echo ""
+echo "  অথবা shortcut:"
+echo "     bash ~/daily-push.sh"
 echo ""
 echo "  🧪 Worker test চালাতে:"
 echo "     cd ~/Ftt-Otc-v6 && node scripts/fix_tests.mjs"
