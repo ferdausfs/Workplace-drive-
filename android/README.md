@@ -22,7 +22,9 @@ adb install app/build/outputs/apk/release/app-release-unsigned.apk
 adb logcat -s REUNION_APP
 ```
 Expected markers: `onCreate` → `onPageStarted` → `onPageFinished` →
-`onBackPressed` (only when navigating back).
+`onBackPressed` (only when navigating back). On an unexpected load failure you
+will instead see `onReceivedError` and a branded fallback page (never a blank
+screen).
 
 ## CI
 A ready-to-use GitHub Actions workflow is included at

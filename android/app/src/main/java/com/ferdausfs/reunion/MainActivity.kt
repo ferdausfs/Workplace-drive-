@@ -6,6 +6,7 @@ import android.graphics.Bitmap
 import android.os.Bundle
 import android.util.Log
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -63,6 +64,28 @@ class MainActivity : Activity() {
                 // The page only links to its own in-page anchors, so stay inside the WebView.
                 Log.d(TAG, "shouldOverrideUrlLoading: url=${request?.url}")
                 return false
+            }
+
+            override fun onReceivedError(
+                view: WebView?,
+                request: WebResourceRequest?,
+                error: WebResourceError?
+            ) {
+                super.onReceivedError(view, request, error)
+                Log.e(TAG, "onReceivedError: code=${error?.errorCode} desc=${error?.description} url=${request?.url}")
+                // reunion.html is bundled in assets, but never leave a blank screen if
+                // something unexpected fails — show a minimal branded fallback.
+                val fallback = """
+                    <html><body style="margin:0;font-family:sans-serif;background:#FAF9F5;color:#1A1A18;
+                        display:flex;align-items:center;justify-content:center;height:100%">
+                      <div style="text-align:center;padding:24px">
+                        <div style="font-size:42px">😢</div>
+                        <h2 style="color:#D97757;margin:12px 0 4px">Page load failed</h2>
+                        <p style="margin:0;color:#4A463E">Could not load the reunion page.</p>
+                      </div>
+                    </body></html>
+                """.trimIndent()
+                view?.loadDataWithBaseURL(null, fallback, "text/html", "UTF-8", null)
             }
         }
         webView.webChromeClient = WebChromeClient()
