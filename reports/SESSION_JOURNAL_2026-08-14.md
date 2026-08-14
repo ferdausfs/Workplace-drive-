@@ -47,3 +47,22 @@
 - Bundle SHA `6419a433…` = capsule declared SHA = fresh rebuild SHA (triple match)।
 - Worker push = PLAIN TEXT (no parse_mode) ✓ · Bot sendMessage = HTML+escape (নিজস্ব, signal-এর নয়)।
 - কোনো secret chat/workspace-এ নেই; bundle-এও embedded নেই (env থেকে runtime-এ read)।
+
+---
+
+## 6. ADDENDUM (deploy prep) — redeploy.sh schedules bug FOUND & FIXED
+
+- **Bug:** snapshot-এর `Ftt-Otc-v6/scripts/redeploy.sh` schedules PUT-এ `{"schedules":[...]}` wrapper পাঠায়।
+- **Evidence:** Cloudflare official API docs → body = **raw array** `[{...}]`; wrapper → HTTP 10026 (08-13 prompt-এর live finding-ও তাই)।
+- **TERMUX_SETUP-এ লেখা "ami fix kore diyechi redeploy.sh e" — ফাইলে দেখা যায়নি** (fix apply হয়নি/হারিয়ে গেছে)।
+- **Fixed (1 line):** SCHED body এখন raw array। `bash -n` syntax OK। Fixed copy → `Workplace-drive-/worker/scripts/redeploy.sh` (worker repo-তে PR/commit করতে হবে)।
+
+---
+
+## 7. ADDENDUM 2 — DEPLOY DONE + LIVE VERIFIED
+
+- User Termux দিয়ে deploy করলো: script PUT `success:true` (modified_on 08:25:42Z), schedules PUT `success:true` (raw-array fix কাজ করেছে, 10026 আসেনি), ৩টা cron registered।
+- **`0 0 * * 1` (self-calib) cron-টা live-এ নতুন add হয়েছে** (created_on 08-14) — আগে ছিল না; 08-13 prompt-এর open item বন্ধ।
+- Independent live verify (reviewer sandbox থেকে `GET /health`): `version 6.10.1`, `push.enabled true`, `tokenValid true` (fttbotbot), `delivered24h 24`, scanner firing (newestCachedAge 271s < 300s), gate সঠিক (AUD/USD no-match = pair-not-watched)।
+- **দরকারি সংশোধন:** v6.10.1 আসলে 08-13 ~05:04Z থেকেই live ছিল (capsule-এর PROMPT_CF_CRON_FIX-এ "version 6.10.1" লেখা) — "deploy fail, still 6.10.0" narrative snapshot সময়েই stale। আজকের deploy = idempotent re-deploy + missing cron add।
+- নতুন report: `reports/V6101_LIVE_VERIFY_2026-08-14.md`।

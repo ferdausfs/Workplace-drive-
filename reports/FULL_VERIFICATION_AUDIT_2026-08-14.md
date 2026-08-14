@@ -103,3 +103,15 @@ and my 7 repairs are confirmed correct by independent ground truth. Reconstructi
 6. **Phase F data** — lives only in `Workplace-drive-/data/phase_f_forward_FULL_2026-08-12.tar.gz` (binary, not embedded in capsule). Needs the original ZIP to continue Phase F analysis.
 
 **Bottom line:** Capsule is high-quality and its code claims check out. The only real drift is stale *numbers* (test counts, one bundle size, one cron note) — not stale *logic*. Nothing here weakens tests, invents data, or touches live state.
+
+---
+
+## PART E — ADDENDUM (2026-08-14, deploy prep): redeploy.sh schedules-body bug
+
+- **Finding:** `scripts/redeploy.sh` (snapshot HEAD) sends `PUT .../schedules` with body `{"schedules":[...]}`.
+  Cloudflare's official API reference defines the body as a **raw array** `[{"cron":"..."}]`; the wrapper
+  returns HTTP 10026 "Could not parse request body" (also documented live in `PROMPT_CF_CRON_FIX_2026-08-13.md`).
+- **Note:** TERMUX_SETUP claims "ami fix kore diyechi redeploy.sh e" — the fix is **not present** in the
+  snapshot's redeploy.sh. Historical claim did not match file state.
+- **Action:** fixed locally (SCHED body → raw array, `bash -n` OK), saved to
+  `Workplace-drive-/worker/scripts/redeploy.sh`. Should land in `Ftt-Otc-v6` via PR.
