@@ -124,3 +124,18 @@
   - **Grade inversion**: C 47.8% > A+ 42.1% — grade predictive নয়; review flag।
   - **D4 ML**: no actionable edge (LEGIT confident-only 45.9% CI ambiguous; leaky model-ও breakeven clear করে না)।
 - **No premature conclusions:** no inversion / pair-block / real-money rec। FOREX action = user decision + change control।
+
+---
+
+## 13. ADDENDUM 6 — Phase F deep-dive + multi-agent pack
+
+- **User প্রশ্ন:** একা investigate করবো নাকি multiple agents? → উত্তর: sandbox-এ অন্য agent spawn করা যায় না;
+  করলাম ৭টা স্বাধীন pass নিজে (cross-check), আর external agents-এর জন্য standardized pack বানালাম (reviewer আমি)।
+- **Deep-dive NEW findings** (full: `reports/PHASE_F_DEEP_DIVE_2026-08-14.md`):
+  1. Round-3 improvement = 100% within-class (mix-shift 0.1pt); permutation p<0.001। FOREX pre 26.8% → post 49.5%।
+  2. FOREX এখনো weakest কিন্তু "hopeless" নয় — residual weakness RANGING (BUY 32.8%) + ASIAN session (34.1%)-এ।
+  3. Top candidate cell CRYPTO/TRENDING/BUY 56.3% (CI 49.0–63.3) — gate clear নয়, watch only।
+  4. structureVerdict anti-predictive (AGAINST 49.9% > ALIGNED 42.5%); AI-agreement WR বাড়ায় না; grade inverted।
+- **Pack:** `prompts/PROMPT_PHASE_F_MULTI_AGENT_2026-08-14.md` + `scripts/phase_f_baseline.py` (canonical baseline,
+  verified == আমার numbers)। External agents চালালে রিপোর্ট drive `reports/`-এ → আমি verify করবো।
+- **Method note (honest):** একাধিক agent ≠ নতুন data; নতুন data আসবে forward window চলতে থাকলে।
