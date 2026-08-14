@@ -88,3 +88,12 @@
   `pr/apply_worker_pr.sh` (self-contained; verified end-to-end on a fake repo: branch → commit → push branch)।
   PR base `cd3dc08`, branch `fix/redeploy-schedules-raw-array`।
 - সব materials drive sync #3 দিয়ে যাবে।
+
+---
+
+## 10. ADDENDUM 4 — apply_worker_pr.sh /tmp fix
+
+- Termux-এ `/tmp` writable নয় → apply_worker_pr.sh-এ patch decode `/tmp`-এ হচ্ছিল (Permission denied)।
+- Fixed: `$HOME/redeploy_fix.patch` + apply-এর পর cleanup (`rm -f`)। End-to-end re-test (fake repo): PASS।
+- User-side quick fix: `sed -i 's#/tmp/redeploy_fix.patch#$HOME/redeploy_fix.patch#g' ~/Workplace-drive-/pr/apply_worker_pr.sh`
+- Canonical fixed copy → drive_sync_4.sh দিয়ে push হবে।

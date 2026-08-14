@@ -28,14 +28,15 @@ grep -q '322007' scripts/redeploy.sh || fail "322007 comment not found — file 
 echo "  ✓ old content confirmed"
 
 echo "── decode + verify patch ──"
-printf '%s' "$PATCH_B64" | base64 -d > /tmp/redeploy_fix.patch
-ACT=$(sha256sum /tmp/redeploy_fix.patch | cut -d' ' -f1)
+printf '%s' "$PATCH_B64" | base64 -d > $HOME/redeploy_fix.patch
+ACT=$(sha256sum $HOME/redeploy_fix.patch | cut -d' ' -f1)
 [ "$ACT" = "$PATCH_SHA" ] || fail "patch sha mismatch: got $ACT"
 echo "  ✓ patch sha ok"
 
 echo "── apply ──"
-git apply --check /tmp/redeploy_fix.patch || fail "git apply --check failed"
-git apply /tmp/redeploy_fix.patch || fail "git apply failed"
+git apply --check $HOME/redeploy_fix.patch || fail "git apply --check failed"
+git apply $HOME/redeploy_fix.patch || fail "git apply failed"
+rm -f $HOME/redeploy_fix.patch
 
 echo "── verify new content ──"
 grep -q '{"schedules":' scripts/redeploy.sh && fail "wrapper STILL present after apply"
