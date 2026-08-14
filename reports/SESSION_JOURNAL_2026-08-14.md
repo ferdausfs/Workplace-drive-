@@ -66,3 +66,25 @@
 - Independent live verify (reviewer sandbox থেকে `GET /health`): `version 6.10.1`, `push.enabled true`, `tokenValid true` (fttbotbot), `delivered24h 24`, scanner firing (newestCachedAge 271s < 300s), gate সঠিক (AUD/USD no-match = pair-not-watched)।
 - **দরকারি সংশোধন:** v6.10.1 আসলে 08-13 ~05:04Z থেকেই live ছিল (capsule-এর PROMPT_CF_CRON_FIX-এ "version 6.10.1" লেখা) — "deploy fail, still 6.10.0" narrative snapshot সময়েই stale। আজকের deploy = idempotent re-deploy + missing cron add।
 - নতুন report: `reports/V6101_LIVE_VERIFY_2026-08-14.md`।
+
+---
+
+## 8. FINAL — R2 forward proof closed
+
+- User-এর last check: `delivered24h 24 → 25` = fresh watched-pair DM landed (post-deploy observation)।
+- Reviewer independent re-read: version 6.10.1, push healthy, tokenValid true, scanner firing (82s), ADA/USD no-match = gate ঠিক।
+- **6.10.1 push pipeline end-to-end verified।** এই drive-copy-র addendum পরের sync-এ যাবে।
+
+---
+
+## 9. ADDENDUM 3 — doc-fix + redeploy.sh PR (PR-first)
+
+- **Doc-fix done (workspace):** `Ftt-Otc-v6/scripts/redeploy.sh` + drive mirror `worker/scripts/redeploy.sh`:
+  `EXPECTED_BYTES` comment `322007 → 322283` (verified bundle size; sha `6419a433…`)।
+- **Runbook PART 9 stale counts identified** (fix via guarded in-place patch on their real drive repo):
+  `fix_tests 158/158 → 304/304 (T1-T43)` · `phase10_smoke 61/61 → 71/71` ·
+  `r71 BASELINE_COMMIT e56cd33 → ec6ed65`। Historical reports-এর পুরনো count **ছোঁয়া হয়নি** (point-in-time truth)।
+- **Worker PR ready (PR-first):** `pr/redeploy-schedules-fix.patch` (2 hunks) + `pr/PR_BODY_redeploy_fix.md` +
+  `pr/apply_worker_pr.sh` (self-contained; verified end-to-end on a fake repo: branch → commit → push branch)।
+  PR base `cd3dc08`, branch `fix/redeploy-schedules-raw-array`।
+- সব materials drive sync #3 দিয়ে যাবে।

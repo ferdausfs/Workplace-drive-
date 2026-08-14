@@ -225,13 +225,13 @@ Live proof: MISS WR = **100.0% on 08-05/06/07 (3/3 days)** — exactly what my 2
 # PART 9 — TEST SUITES (worker) — ALWAYS RUN
 
 ```
-scripts/fix_tests.mjs          158/158  (T1-T33, incl. FIX-EH re-test semantics)
+scripts/fix_tests.mjs          304/304  (T1-T43, incl. FIX-EH + v6.10.1 push tests)
 scripts/phase10_integration.mjs 19/19   (push works — was failing pre-BUG-001)
-scripts/phase10_smoke.mjs       61/61
+scripts/phase10_smoke.mjs       71/71
 scripts/phase7_integration.mjs  36/36 · phase7_smoke 68/68
 scripts/d2_tests.mjs            39/39 · probe_tests 34/34
 scripts/entry_hit_tests.mjs      7/7  · fx_mode_tests 20/20
-scripts/r71_tests.mjs          117P/0F (frozen-baseline guard, BASELINE_COMMIT=e56cd33)
+scripts/r71_tests.mjs          117P/0F (frozen-baseline guard, BASELINE_COMMIT=ec6ed65)
 ```
 `r71_tests` needs `git fetch --unshallow` (baseline commit must exist locally). node --check all src; `git diff --check` clean.
 
