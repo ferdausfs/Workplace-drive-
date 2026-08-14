@@ -173,3 +173,15 @@
   apply_worker_pr_pe.sh ($HOME-safe). Branch: fix/pending-entry-fill-correctness. User merges.
 - **Phase F impact:** deploy-এর পর unfilled PE আর fake WIN হবে না → WR সামান্য কমবে কিন্তু honest। Window খোলা রাখা হয়েছে।
 - Live deploy NOT done (user action + change control). Bundle rebuild + EXPECTED_BYTES = new size.
+
+---
+
+## 17. ADDENDUM 10 — PR #21 MERGED + v6.10.2 bundle ready
+
+- **PR #21 merged** (reviewer-verified on GitHub): main `380916cb`, parents e7fbeac5+6cfbd311, 5 files, 90+/12-.
+- main stats.js SHA == workspace stats.js (`a70479e9…`) — byte-identical।
+- **v6.10.2 bundle built + verified:** `bundles/worker-v6102-20260814.js` 322,420 B, sha `a0551d67…`,
+  version 6.10.2, fill-fix + winLoss="TIE" present, 0 secrets, node --check PASS.
+- **Deploy = আলাদা ধাপ (user change control)** — runbook: `reports/V6102_DEPLOY_RUNBOOK_2026-08-14.md`।
+  Deploy-এর আগে live 6.10.1; পরে 6.10.2 + honest WR। Phase F window খোলা।
+- Stale PR #18 close করতে বলা হয়েছে।
