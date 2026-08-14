@@ -157,3 +157,19 @@
 - **আমার নিজের ২টা correction (honesty):** (1) "FIX-EH tautology dead" শুধু legacy-subset-এই সত্য — raw entryHit ফিল্ড 08-05/06/07 row-তে এখনো tautological (MISS 100% WIN, n=369); (2) PENDING_ENTRY 60.1% = grading artifact (unfilled limit = mechanical WIN, n=43), edge না — আমার আগের "watch" মন্তব্য over-optimistic ছিল।
 - **Actionable:** PENDING_ENTRY grading bias (stats correctness, F3-02-এর মতো) → user decision + PR-first দরকার।
 - Report: `reports/PHASE_F_MULTIAGENT_REVIEW_2026-08-14.md`।
+
+---
+
+## 16. ADDENDUM 9 — PENDING_ENTRY grading-bias FIX (PR-first, v6.10.2)
+
+- **Root cause (code-level):** scheduledTracker grades PENDING_ENTRY vs entryPrice even when entryHit=false
+  (unfilled favorable limit → mechanical WIN). Verified live: PE+entryHit=false = 100% WIN (n=43).
+- **Fix:** non-shadow PENDING_ENTRY + entryHit=false → TIE (excluded from WR + no result push, existing TIE path).
+  INSTANT untouched; cbShadow keeps counterfactual WIN/LOSS. Version bump 6.10.1 → 6.10.2 (health.js, index.js,
+  redeploy.sh verify check, fix_tests T43j).
+- **Tests:** new T44 block (4 cases). fix_tests 311/0; all 8 other suites green; node --check all src PASS;
+  bash -n redeploy.sh PASS. git apply --check PASS (e7fbeac state). apply script end-to-end tested (branch→commit→push).
+- **PR materials (drive pr/):** pe-fill-correctness-v6102.patch (sha 24a2642c…), PR_BODY_pe_fill_correctness.md,
+  apply_worker_pr_pe.sh ($HOME-safe). Branch: fix/pending-entry-fill-correctness. User merges.
+- **Phase F impact:** deploy-এর পর unfilled PE আর fake WIN হবে না → WR সামান্য কমবে কিন্তু honest। Window খোলা রাখা হয়েছে।
+- Live deploy NOT done (user action + change control). Bundle rebuild + EXPECTED_BYTES = new size.

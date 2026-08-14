@@ -1,0 +1,176 @@
+--- a/src/history/stats.js
++++ b/src/history/stats.js
+@@ -347,7 +347,7 @@
+ 
+         const exitPrice = fetchResult ? fetchResult.price : null;
+         // Bugfix round 1 (BUG-008): exit == entry is a TIE, not a LOSS.
+-        const winLoss = classifyOutcome(record.direction, record.entryPrice, exitPrice);
++        let winLoss = classifyOutcome(record.direction, record.entryPrice, exitPrice);
+ 
+         // ── Entry-hit shadow (FIX-EH): a meaningful re-test requires an
+         // INSTANT entry to be left in the signal's favour before price returns.
+@@ -392,6 +392,22 @@
+           record.entryHitLegacy = null;
+         }
+ 
++        // ── FILL-CORRECTNESS (Phase F review 2026-08-14) ───────────────────
++        // A PENDING_ENTRY signal whose entry was never touched during
++        // [signal → expiry] (entryHit === false) was never actually filled, so
++        // grading it WIN/LOSS against the entry price is a mechanical artifact:
++        // an unfilled favourable limit (BUY entry below market / SELL entry
++        // above market) that the market never revisits is "in the money" by
++        // construction and always resolves WIN. Verified live: PENDING_ENTRY +
++        // entryHit=false = 100% WIN (n=43) before this fix. Reclassify as TIE
++        // so the row is stored but excluded from WR stats and result pushes
++        // (the existing TIE/UNKNOWN path). INSTANT rows are unaffected, and
++        // cbShadow rows keep their counterfactual WIN/LOSS resolution — D2
++        // shadow instrumentation semantics are deliberately unchanged.
++        if (!record.cbShadow && record.fillStatus === 'PENDING_ENTRY' && record.entryHit === false) {
++          winLoss = 'TIE';
++        }
++
+         await updateSignalResult(record, winLoss, exitPrice, env);
+         await env.SIGNAL_CACHE.delete(kvEntry.name);
+         // §3.3: shadow rows are outcome-tracked but never pollute WR / CB state
+--- a/src/handlers/health.js
++++ b/src/handlers/health.js
+@@ -27,7 +27,7 @@
+   const phase10        = await getPushStats(env, { validateToken: true });        // Phase 10 push
+ 
+   return jsonResponse({
+-    status: 'healthy', version: '6.10.1', timestamp: new Date().toISOString(),
++    status: 'healthy', version: '6.10.2', timestamp: new Date().toISOString(),
+     apiKeys: { configured: keyCount, source: keySource, status: keyCount > 0 ? 'ready' : 'NO KEYS' },
+     apiKeysLoaded: keyCount,
+     quotaUsedToday,
+--- a/src/index.js
++++ b/src/index.js
+@@ -1,5 +1,5 @@
+ /**
+- * FTT Signal Worker v6.10.1
++ * FTT Signal Worker v6.10.2
+  * Cloudflare Worker Entry Point
+  */
+ 
+@@ -124,7 +124,7 @@
+       } else {
+         response = jsonResponse({
+           status: 'ok',
+-          message: 'FTT Signal Worker v6.10.1 — Forex + Crypto + OTC + History Tracking',
++          message: 'FTT Signal Worker v6.10.2 — Forex + Crypto + OTC + History Tracking',
+           endpoints: {
+             health:    '/',
+             signal:    '/api/signal?pair=EUR/USD',
+--- a/scripts/fix_tests.mjs
++++ b/scripts/fix_tests.mjs
+@@ -1817,13 +1817,75 @@
+   ok('T43h: scheduled */5 awaits scheduledScan (does not wrap-and-return)',
+     idx.includes('await scheduledScan(env, ctx)') && !idx.includes('ctx.waitUntil(scheduledScan'));
+ 
+-  // Reviewer R1/R2: /health must carry version 6.10.1 and a push object whose
++  // Reviewer R1/R2: /health must carry version 6.10.2 and a push object whose
+   // delivered24h field is the durable counter (not the deletable pushLog keys).
+   const hh = fs.readFileSync(fileURLToPath(new URL('../src/handlers/health.js', import.meta.url)), 'utf8');
+   ok('T43i: /health push block exposes durable delivered24h at top level',
+     hh.includes('delivered24h') && hh.includes('phase10.pushesLast24h'));
+-  ok('T43j: /health version bumped to 6.10.1',
+-    hh.includes("version: '6.10.1'"));
++  ok('T43j: /health version bumped to 6.10.2',
++    hh.includes("version: '6.10.2'"));
++}
++
++console.log('\n── T44: PENDING_ENTRY unfilled -> TIE, not mechanical WIN (Phase F 2026-08-14) ──');
++{
++  // Fixture helpers: build a pending record + history row and a fetch stub whose
++  // expiry candle sits on the favourable side of the entry (never touched).
++  const mkRow = (id, fillStatus, entryPrice, extra = {}) => ({
++    id, pair: 'BTC/USD', isOTC: false, direction: 'BUY',
++    entryPrice, expiryTime: new Date(Date.now() - 10 * 60000).toISOString(),
++    timestamp: new Date(Date.now() - 30 * 60000).toISOString(),
++    fillStatus, result: null, exitPrice: null, ...extra,
++  });
++
++  const run = async (record) => {
++    const expMin = new Date(record.expiryTime).toISOString().slice(0, 19).replace('T', ' ');
++    const kv = makeKV({
++      ['pending:' + record.id]: record,
++      ['sig:BTC_USD']: [record],
++    });
++    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({
++      values: [{ datetime: expMin, open: '100.5', high: '101.5', low: '100.5', close: '101' }],
++    }), text: async () => '' });
++    await scheduledTracker({ SIGNAL_CACHE: kv, TWELVEDATA_API_KEYS: '["k1"]' });
++    return kv;
++  };
++
++  // (a) PENDING_ENTRY + entry never touched (low 100.5 > entry 100) -> TIE, no stats.
++  {
++    const kv = await run(mkRow('sig_fill_a', 'PENDING_ENTRY', 100));
++    const row = (await kv.get('sig:BTC_USD', 'json'))[0];
++    eq('T44a: unfilled PENDING_ENTRY resolves TIE (not mechanical WIN)', row.result, 'TIE');
++    ok('T44a: entryHit recorded false (evidence of never-filled)', row.entryHit === false);
++    ok('T44a: TIE excluded from pair stats', kv._m.get('stats:BTC_USD') === undefined);
++  }
++
++  // (b) PENDING_ENTRY + entry touched (low below entry) -> still WIN/LOSS.
++  {
++    const rec = mkRow('sig_fill_b', 'PENDING_ENTRY', 100);
++    const expMin = new Date(rec.expiryTime).toISOString().slice(0, 19).replace('T', ' ');
++    const kv = makeKV({ 'pending:sig_fill_b': rec, 'sig:BTC_USD': [rec] });
++    globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => ({
++      values: [{ datetime: expMin, open: '99.4', high: '100.4', low: '99.4', close: '101' }],
++    }), text: async () => '' });
++    await scheduledTracker({ SIGNAL_CACHE: kv, TWELVEDATA_API_KEYS: '["k1"]' });
++    const row = (await kv.get('sig:BTC_USD', 'json'))[0];
++    eq('T44b: filled PENDING_ENTRY still graded WIN', row.result, 'WIN');
++    ok('T44b: entryHit recorded true', row.entryHit === true);
++  }
++
++  // (c) INSTANT + no re-test return -> still WIN/LOSS (fix is PENDING_ENTRY-only).
++  {
++    const kv = await run(mkRow('sig_fill_c', 'INSTANT', 100));
++    const row = (await kv.get('sig:BTC_USD', 'json'))[0];
++    eq('T44c: INSTANT resolution untouched (still WIN)', row.result, 'WIN');
++  }
++
++  // (d) cbShadow row keeps its counterfactual WIN/LOSS resolution.
++  {
++    const kv = await run(mkRow('sig_fill_d', 'PENDING_ENTRY', 100, { cbShadow: true }));
++    const row = (await kv.get('sig:BTC_USD', 'json'))[0];
++    eq('T44d: cbShadow PENDING_ENTRY keeps counterfactual WIN', row.result, 'WIN');
++  }
+ }
+ 
+ console.log('\n───────────────────────────────────────────────────────────');
+--- a/scripts/redeploy.sh
++++ b/scripts/redeploy.sh
+@@ -43,8 +43,8 @@
+ # Env overrides:
+ #   SCRIPT_NAME     default fttotcv6
+ #   META            default $HOME/wmeta.json
+-#   EXPECTED_BYTES  if set, bundle size must match exactly (v6.10.1 bundle
+-#                   worker-v6101-20260812.js = 322283 bytes)
++#   EXPECTED_BYTES  if set, bundle size must match exactly (v6.10.2 bundle
++#                   rebuild after merge; set to its exact byte size)
+ #   CRONS           comma list, default "*/2 * * * *,*/5 * * * *,0 0 * * * 1"
+ #   HEALTH_URL      default https://fttotcv6.umuhammadiswa.workers.dev/health
+ #   SKIP_HEALTH=1   skip the post-deploy /health verification
+@@ -160,15 +160,15 @@
+ print("  push.subscribers   =", len(p.get("subscribers") or []), "subscriber(s)")
+ print("  push.lastAttempt   =", json.dumps(p.get("lastAttempt"))[:300])
+ print("  push.delivered24h  =", p.get("delivered24h"))
+-if str(d.get("version")) != "6.10.1":
+-    print("  ✗ version is not 6.10.1 — deploy did not take effect (or this is the old script).")
++if str(d.get("version")) != "6.10.2":
++    print("  ✗ version is not 6.10.2 — deploy did not take effect (or this is the old script).")
+     sys.exit(2)
+ if p.get("enabled") and p.get("tokenValid") is False:
+     print("  ✗ BOT_TOKEN on fttotcv6 is NOT a valid live bot token.")
+     print("    Fix: wrangler secret put BOT_TOKEN --name fttotcv6")
+     print("    (use the SAME value the ftt-telegram-bot worker uses; then re-check /health)")
+     sys.exit(3)
+-print("  ✓ live worker is 6.10.1 with push diagnostics visible (R1)")
++print("  ✓ live worker is 6.10.2 with push diagnostics visible (R1)")
+ PY
+   local rc=$?
+   rm -f "$hbody"
