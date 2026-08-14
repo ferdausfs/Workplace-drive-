@@ -199,3 +199,29 @@
 - **Fixed:** workspace + drive mirror-এ `0 0 * * * 1` → `0 0 * * 1` (bash -n + functional check PASS)।
   PR materials: pr/redeploy-cron-string-fix.patch + PR_BODY + apply_worker_pr_cron.sh।
 - **Deploy re-run লাগবে না** — worker v6.10.2 live + crons ঠিক; এ PR শুধু পরের deploy cycle-র জন্য।
+
+---
+
+## 19. FINAL — PR #22 merged; session close-out
+
+- **PR #22 merged** (reviewer-verified on GitHub): main `cf7200e3`, redeploy.sh-এ 6-field gone / 5-field present।
+- Worker v6.10.2 live + 3 crons + push healthy। Phase F window খোলা — আগামীকালের snapshot থেকে honest data।
+- **Session-এর সব কাজ বন্ধ:** audit ✅ · v6.10.1 live ✅ · 4-agent review ✅ · ২টা fix PR (#21, #22) ✅ ·
+  v6.10.2 live ✅ · drive canonical ✅।
+- **Open item (user):** stale PR #18 close করা বাকি — https://github.com/ferdausfs/Ftt-Otc-v6/pull/18
+
+---
+
+## 20. WORKSPACE CLEANUP + CANONICAL POINTERS (session close)
+
+- **PR #22 merged** (2026-08-14): worker repo main = `cf7200e3`. Live worker = **v6.10.2** (verified).
+- **Workspace cleaned** 2026-08-14 (light): reconstructed repos, bundles, scratch scripts মুছে ফেলা হয়েছে —
+  সবকিছু canonical-এ আছে। এই journal + সব report drive-তে।
+- **Canonical locations (পরের agent-এর জন্য — এখান থেকেই শুরু করবে):**
+  - এই journal + সব report → `Workplace-drive-/reports/` (GitHub: `ferdausfs/Workplace-drive-`)
+  - Phase F data snapshot → `Workplace-drive-/data/phase_f_forward_2026-08-14.tar.gz`
+  - **Worker code (canonical) = GitHub `ferdausfs/Ftt-Otc-v6` main** (`cf7200e3`) — drive-এর `worker/` mirror
+    capsule-era snapshot, stale হতে পারে; কোডের জন্য GitHub repo-ই truth।
+  - PR materials → `Workplace-drive-/pr/`
+- **Open item (user):** stale PR #18 close করা বাকি — https://github.com/ferdausfs/Ftt-Otc-v6/pull/18
+- **Next Phase F step:** আগামীকাল fresh snapshot → unfilled PENDING_ENTRY আর fake WIN হবে না (v6.10.2 fix)।
