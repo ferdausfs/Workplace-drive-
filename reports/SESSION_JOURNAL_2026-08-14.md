@@ -97,3 +97,30 @@
 - Fixed: `$HOME/redeploy_fix.patch` + apply-এর পর cleanup (`rm -f`)। End-to-end re-test (fake repo): PASS।
 - User-side quick fix: `sed -i 's#/tmp/redeploy_fix.patch#$HOME/redeploy_fix.patch#g' ~/Workplace-drive-/pr/apply_worker_pr.sh`
 - Canonical fixed copy → drive_sync_4.sh দিয়ে push হবে।
+
+---
+
+## 11. FINAL — PR #20 MERGED + verified on GitHub main
+
+- PR #20 (`fix/deploy: schedules PUT raw array + EXPECTED_BYTES 322283`) **merged** — main `e7fbeac`.
+- Reviewer-verified from GitHub main raw file (both hunks): `322283 bytes` comment ✅ + SCHED raw-array
+  `json.dumps([{...}])` (no `{"schedules":}` wrapper) ✅.
+- **Full workflow closed:** branch → change → test → PR → review/merge → (live deploy + verify already done earlier).
+- Worker repo main now carries the deploy-script fix; next deploy cycle safe from HTTP 10026 + size-mismatch.
+- Note: PR #18 (`fix(push): v6.10.1…`, Aug 12, arena bot) is a stale duplicate of merged PR #19 — user should close it.
+
+---
+
+## 12. ADDENDUM 5 — Phase F analysis done (2026-08-14)
+
+- **Data:** sandbox থেকে live worker snapshot নিজে pull (18 pair, HTTP 200 সব) → `phase_f_forward/2026-08-14/`
+  (5,639 unique signals, forward-window decided 4,161)। Archive `data/phase_f_forward_2026-08-14.tar.gz` (390KB, sha f4e39bc6…)。
+- **Analysis scripts run:** custom forward analysis + `d4_run.py` (numpy/pandas/sklearn/xgboost installed in sandbox)।
+- **Key results (full detail: `reports/PHASE_F_2026-08-14.md`):**
+  - Overall forward WR **44.3%** (CI 42.8–45.9) — breakeven 55.6% **NOT cleared** (gate verdict: ❌)।
+  - Round-3 improvement **real**: 41.8% → 48.5% (CI-separated) — তবু breakeven-এর নিচে।
+  - **FOREX = main drag**: 35.6% (n=514, CI 31.6–39.8); FOREX BUY 32.1% / SELL 39.4% — BUG-024 "SELL weakness" framing এখন পুরনো, পুরো FOREX দুর্বল।
+  - **FIX-EH confirmed**: legacy MISS WR=100% (tautology) vs corrected HIT 48%/MISS 52.6% (tautology dead)।
+  - **Grade inversion**: C 47.8% > A+ 42.1% — grade predictive নয়; review flag।
+  - **D4 ML**: no actionable edge (LEGIT confident-only 45.9% CI ambiguous; leaky model-ও breakeven clear করে না)।
+- **No premature conclusions:** no inversion / pair-block / real-money rec। FOREX action = user decision + change control।
