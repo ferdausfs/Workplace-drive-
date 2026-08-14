@@ -139,3 +139,21 @@
 - **Pack:** `prompts/PROMPT_PHASE_F_MULTI_AGENT_2026-08-14.md` + `scripts/phase_f_baseline.py` (canonical baseline,
   verified == আমার numbers)। External agents চালালে রিপোর্ট drive `reports/`-এ → আমি verify করবো।
 - **Method note (honest):** একাধিক agent ≠ নতুন data; নতুন data আসবে forward window চলতে থাকলে।
+
+---
+
+## 14. ADDENDUM 7 — prompt-এ data-source embed
+
+- External agents-দের কাছে data নেই — prompt-এ "GET EVERYTHING" section যোগ করা হলো: repo URL, direct raw download
+  (Option A clone / Option B curl), sha256 integrity check, contents। Data tar.gz + baseline + prompt সব GitHub drive repo-তেই আছে।
+- Gitignore-safety note: `data/phase_f_forward_2026-08-14.tar.gz` (390KB) repo-তে push হয়েছে — drive archive নিয়ম মেনেই।
+
+---
+
+## 15. ADDENDUM 8 — 4 agent reports reviewed (reviewer verdict)
+
+- User ৪টা independent agent report পাঠালো (Agent01-04)। আমি প্রতিটা critical claim নিজে data-তে re-run করলাম → **৪ জনই CONFIRMED**, কেউ overstated/fabricate নয়।
+- **৪ জনের consensus:** breakeven 55.6% NOT cleared (0 slice CI_lo>55.6); round-3 real (+6.7pp within-class) কিন্তু post 48.5% sub-breakeven; grade inverted; structure anti-predictive; AI value 0; FOREX weakest।
+- **আমার নিজের ২টা correction (honesty):** (1) "FIX-EH tautology dead" শুধু legacy-subset-এই সত্য — raw entryHit ফিল্ড 08-05/06/07 row-তে এখনো tautological (MISS 100% WIN, n=369); (2) PENDING_ENTRY 60.1% = grading artifact (unfilled limit = mechanical WIN, n=43), edge না — আমার আগের "watch" মন্তব্য over-optimistic ছিল।
+- **Actionable:** PENDING_ENTRY grading bias (stats correctness, F3-02-এর মতো) → user decision + PR-first দরকার।
+- Report: `reports/PHASE_F_MULTIAGENT_REVIEW_2026-08-14.md`।
