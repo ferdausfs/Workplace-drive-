@@ -185,3 +185,17 @@
 - **Deploy = আলাদা ধাপ (user change control)** — runbook: `reports/V6102_DEPLOY_RUNBOOK_2026-08-14.md`।
   Deploy-এর আগে live 6.10.1; পরে 6.10.2 + honest WR। Phase F window খোলা।
 - Stale PR #18 close করতে বলা হয়েছে।
+
+---
+
+## 18. ADDENDUM 11 — v6.10.2 DEPLOYED + redeploy.sh cron-string bug found/fixed
+
+- **Deploy SUCCESS (reviewer live-verified):** live `/health` = `version 6.10.2`, push healthy, tokenValid true,
+  scanner firing (newestCachedAge < 300s) → worker v6.10.2 live ✅।
+- **Cron PUT 10100 = script bug (no live impact):** redeploy.sh default CRONS-এ self-calib cron ছিল
+  `0 0 * * * 1` (৬ field, ভুল); Cloudflare ৫ field চায়। wrangler.toml-এ সঠিক `0 0 * * 1`।
+  08:26-এ direct curl সঠিক ৫-field দিয়ে crons set করেছিল → live crons এখনো ঠিক (failed PUT কিছু বদলায়নি)।
+- **Honest note:** এটা আমার PR #20-এ miss করা bug (wrapper ঠিক করেছিলাম, ৬-field cron string চোখে পড়েনি)।
+- **Fixed:** workspace + drive mirror-এ `0 0 * * * 1` → `0 0 * * 1` (bash -n + functional check PASS)।
+  PR materials: pr/redeploy-cron-string-fix.patch + PR_BODY + apply_worker_pr_cron.sh।
+- **Deploy re-run লাগবে না** — worker v6.10.2 live + crons ঠিক; এ PR শুধু পরের deploy cycle-র জন্য।
