@@ -286,3 +286,16 @@
 - **Honest note:** Watch ALL = distribution fix (সব emitted signal bot-এ আসবে), NOT volume-200+।
   Profit-এর আসল পথ = accuracy (breakeven 55.6%); এটা signal পৌঁছানোর সমস্যা ঠিক করে।
 - Deploy after merge: worker bundle + bot bundle (bot_deploy2.sh)।
+
+---
+
+## 25. FINAL — watch-all live-verified + version bump PR (2026-08-15)
+
+- **Verify (reviewer):** worker main `ca65cdf1` (watch-all gate) = live bundle; bot main `b2e7f331` (v4.5.1) = live।
+  উভয় latest code live-তে আছে। Scanner firing।
+- **Observability gap found:** worker version string ছিল 6.10.3 (watch-all PR-তে bump বাদ পড়েছিল) — bundle filename
+  v6104 কিন্তু /health 6.10.3। Functional ঠিক, কিন্তু ambiguous।
+- **Fix:** version bump 6.10.3→6.10.4 (health/index/redeploy/T43j), fix_tests 326/0, bundle worker-v6104-20260815.js
+  (325,017 B, sha e9fe753d…), apply_version_bump.sh (verified end-to-end)। Branch: chore/version-6104।
+- **watchAll প্রমাণ বাকি:** পরের tradeable signal-এ delivered24h বাড়বে (lastAttempt pushed>=1) — forward verify।
+- Deploy after merge: EXPECTED_BYTES=325017 redeploy.sh worker-v6104-20260815.js → /health = 6.10.4।
