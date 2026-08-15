@@ -204,3 +204,15 @@ User report: "onek besi false block kore"। Code-এ ৬টা স্পষ্�
 - Config: SharedPreferences `guardian_prefs` (M3 UI-র setter ready)।
 - patch: drive `pr/m2_service_hook.patch` (sha d66e5b5e…), PR body `pr/PR_BODY_m2_service_hook.md`।
 - ⚠️ compile = CI (মার্জের পর auto-build)। **Next M3:** settings UI (toggle/gender/threshold/model import)।
+
+---
+
+## 16. M3 DONE — Guardian settings UI (PR-ready)
+
+- `GuardianFragment.kt` (new, 195 lines) + `fragment_guardian.xml` + `item_guardian_keyword.xml` +
+  `card_guardian` in reducers + FragmentActivity registration + 20 strings + GuardianBlocker.refresh()।
+- Controls: enable toggle, gender (None/M/F), 3 threshold sliders + grid votes, keyword add/remove,
+  3 model imports (SAF picker)।
+- Pattern: curbox reducer/card/fragment style, SharedPreferences + broadcast reload। No Compose।
+- patch: drive `pr/m3_settings_ui.patch` (sha 6744451e…), PR body `pr/PR_BODY_m3_settings_ui.md`।
+- ⚠️ compile = CI। **Next M4:** AI-block overlay (go-home+toast → proper block screen) + activity log।

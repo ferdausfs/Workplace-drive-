@@ -1,0 +1,829 @@
+diff --git a/app/src/main/java/neth/iecal/curbox/blockers/GuardianBlocker.kt b/app/src/main/java/neth/iecal/curbox/blockers/GuardianBlocker.kt
+index 5f0a9e4..ac40e2f 100644
+--- a/app/src/main/java/neth/iecal/curbox/blockers/GuardianBlocker.kt
++++ b/app/src/main/java/neth/iecal/curbox/blockers/GuardianBlocker.kt
+@@ -43,6 +43,17 @@ class GuardianBlocker {
+         private const val PREFS = "guardian_prefs"
+         private const val SCAN_THROTTLE_MS = 800L
+         private const val MIN_IMAGE_REGION_PX = 80
++
++        /**
++         * Tells the running service (if any) to reload its Guardian config.
++         * Settings screens call this after persisting changes.
++         */
++        fun refresh(context: Context) {
++            try {
++                val intent = Intent(INTENT_ACTION_REFRESH).setPackage(context.packageName)
++                context.sendBroadcast(intent)
++            } catch (_: Throwable) {}
++        }
+     }
+ 
+     private lateinit var service: BaseBlockingService
+diff --git a/app/src/main/java/neth/iecal/curbox/ui/activity/FragmentActivity.kt b/app/src/main/java/neth/iecal/curbox/ui/activity/FragmentActivity.kt
+index 777f932..cd81790 100644
+--- a/app/src/main/java/neth/iecal/curbox/ui/activity/FragmentActivity.kt
++++ b/app/src/main/java/neth/iecal/curbox/ui/activity/FragmentActivity.kt
+@@ -26,6 +26,7 @@ import neth.iecal.curbox.ui.fragments.main.reducers.blockertools.uiHider.UiHider
+ import neth.iecal.curbox.ui.fragments.main.reducers.advanced.AntiUninstallFragment
+ import neth.iecal.curbox.ui.fragments.main.reducers.advanced.ServiceProtectionFragment
+ import neth.iecal.curbox.ui.fragments.main.reducers.advanced.SettingsChangeDelayFragment
++import neth.iecal.curbox.ui.fragments.main.reducers.guardian.GuardianFragment
+ import androidx.core.view.isVisible
+ import android.animation.ValueAnimator
+ import android.content.Context
+@@ -109,7 +110,8 @@ class FragmentActivity : AppCompatActivity() {
+             AntiUninstallFragment.FRAGMENT_ID,
+             ServiceProtectionFragment.FRAGMENT_ID,
+             SettingsChangeDelayFragment.FRAGMENT_ID,
+-            CreateKeywordGroupFragment.FRAGMENT_ID -> {
++            CreateKeywordGroupFragment.FRAGMENT_ID,
++            GuardianFragment.FRAGMENT_ID -> {
+                 // Hide bottom nav for these standalone fragments
+                 bottomNav.visibility = android.view.View.GONE
+                 
+@@ -120,6 +122,7 @@ class FragmentActivity : AppCompatActivity() {
+                     ReelBlockerFragment.FRAGMENT_ID -> ReelBlockerFragment()
+                     KeywordBlockerFragment.FRAGMENT_ID -> KeywordBlockerFragment()
+                     CreateKeywordGroupFragment.FRAGMENT_ID -> CreateKeywordGroupFragment()
++                    GuardianFragment.FRAGMENT_ID -> GuardianFragment()
+                     UiHiderFragment.FRAGMENT_ID -> UiHiderFragment()
+                     UiHiderEditorFragment.FRAGMENT_ID -> UiHiderEditorFragment()
+                     AutoDndFragment.FRAGMENT_ID -> AutoDndFragment()
+diff --git a/app/src/main/java/neth/iecal/curbox/ui/fragments/main/reducers/ReducersFragment.kt b/app/src/main/java/neth/iecal/curbox/ui/fragments/main/reducers/ReducersFragment.kt
+index 92b5bc3..5bc40c6 100644
+--- a/app/src/main/java/neth/iecal/curbox/ui/fragments/main/reducers/ReducersFragment.kt
++++ b/app/src/main/java/neth/iecal/curbox/ui/fragments/main/reducers/ReducersFragment.kt
+@@ -19,6 +19,7 @@ import com.google.android.material.button.MaterialButton
+ import com.google.android.material.card.MaterialCardView
+ import neth.iecal.curbox.ui.fragments.main.reducers.anti_stimulants.grayscale.GrayscaleFragment
+ import neth.iecal.curbox.ui.fragments.main.reducers.blockertools.appBlocker.AppBlockerGroupsFragment
++import neth.iecal.curbox.ui.fragments.main.reducers.guardian.GuardianFragment
+ 
+ class ReducersFragment : Fragment() {
+     override fun onCreateView(
+@@ -56,6 +57,14 @@ class ReducersFragment : Fragment() {
+             startActivity(intent)
+         }
+ 
++        val guardianCard = view.findViewById<MaterialCardView>(R.id.card_guardian)
++        guardianCard.setOnClickListener {
++            val intent = Intent(requireContext(), FragmentActivity::class.java).apply {
++                putExtra("fragment", GuardianFragment.FRAGMENT_ID)
++            }
++            startActivity(intent)
++        }
++
+         autoDndCard.setOnClickListener {
+             val intent = Intent(requireContext(), FragmentActivity::class.java).apply {
+                 putExtra("fragment", neth.iecal.curbox.ui.fragments.main.reducers.blockertools.autodnd.AutoDndFragment.FRAGMENT_ID)
+diff --git a/app/src/main/java/neth/iecal/curbox/ui/fragments/main/reducers/guardian/GuardianFragment.kt b/app/src/main/java/neth/iecal/curbox/ui/fragments/main/reducers/guardian/GuardianFragment.kt
+new file mode 100644
+index 0000000..38508eb
+--- /dev/null
++++ b/app/src/main/java/neth/iecal/curbox/ui/fragments/main/reducers/guardian/GuardianFragment.kt
+@@ -0,0 +1,195 @@
++package neth.iecal.curbox.ui.fragments.main.reducers.guardian
++
++import android.net.Uri
++import android.os.Bundle
++import android.view.LayoutInflater
++import android.view.View
++import android.view.ViewGroup
++import android.widget.LinearLayout
++import android.widget.TextView
++import android.widget.Toast
++import androidx.activity.result.contract.ActivityResultContracts
++import androidx.fragment.app.Fragment
++import androidx.lifecycle.lifecycleScope
++import com.google.android.material.button.MaterialButton
++import com.google.android.material.materialswitch.MaterialSwitch
++import com.google.android.material.slider.Slider
++import com.google.android.material.textfield.TextInputEditText
++import kotlinx.coroutines.launch
++import neth.iecal.curbox.R
++import neth.iecal.curbox.guardian.GuardianConstants
++import neth.iecal.curbox.guardian.GuardianModelImportManager
++import neth.iecal.curbox.blockers.GuardianBlocker
++
++/**
++ * Guardian (NSFW content blocking) settings — M3.
++ *
++ * Controls: enable toggle, user gender, three detection thresholds, grid vote
++ * count, keyword rules and the three TFLite model imports. Configuration is
++ * persisted in the SharedPreferences store that GuardianBlocker reads live.
++ */
++class GuardianFragment : Fragment() {
++
++    companion object {
++        const val FRAGMENT_ID = "guardian"
++        private const val PREFS = "guardian_prefs"
++    }
++
++    private var importingModel: String? = null
++
++    private val openDocument =
++        registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
++            val model = importingModel ?: return@registerForActivityResult
++            importingModel = null
++            if (uri == null) return@registerForActivityResult
++            lifecycleScope.launch {
++                val result = GuardianModelImportManager.get(requireContext())
++                    .importModel(uri, model)
++                val msg = result.fold(
++                    onSuccess = { getString(R.string.guardian_model_imported, model) },
++                    onFailure = { getString(R.string.guardian_model_import_failed, model) },
++                )
++                Toast.makeText(requireContext(), msg, Toast.LENGTH_LONG).show()
++            }
++        }
++
++    override fun onCreateView(
++        inflater: LayoutInflater,
++        container: ViewGroup?,
++        savedInstanceState: Bundle?,
++    ): View {
++        val view = inflater.inflate(R.layout.fragment_guardian, container, false)
++        val context = requireContext()
++        val prefs = context.getSharedPreferences(PREFS, android.content.Context.MODE_PRIVATE)
++
++        // ── enable ────────────────────────────────────────────────────────────
++        val enableSwitch = view.findViewById<MaterialSwitch>(R.id.guardian_enable)
++        enableSwitch.isChecked = prefs.getBoolean("enabled", false)
++        enableSwitch.setOnCheckedChangeListener { _, checked ->
++            prefs.edit().putBoolean("enabled", checked).apply()
++            GuardianBlocker.refresh(context)
++        }
++
++        // ── gender ────────────────────────────────────────────────────────────
++        val gender = prefs.getString("gender", "NONE") ?: "NONE"
++        fun bindGender() {
++            val current = prefs.getString("gender", "NONE") ?: "NONE"
++            view.findViewById<MaterialButton>(R.id.btn_gender_none).isEnabled = current != "NONE"
++            view.findViewById<MaterialButton>(R.id.btn_gender_male).isEnabled = current != "MALE"
++            view.findViewById<MaterialButton>(R.id.btn_gender_female).isEnabled = current != "FEMALE"
++            view.findViewById<TextView>(R.id.txt_gender_value).text = current
++        }
++        bindGender()
++        view.findViewById<MaterialButton>(R.id.btn_gender_none).setOnClickListener {
++            prefs.edit().putString("gender", "NONE").apply()
++            GuardianBlocker.refresh(context)
++            bindGender()
++        }
++        view.findViewById<MaterialButton>(R.id.btn_gender_male).setOnClickListener {
++            prefs.edit().putString("gender", "MALE").apply()
++            GuardianBlocker.refresh(context)
++            bindGender()
++        }
++        view.findViewById<MaterialButton>(R.id.btn_gender_female).setOnClickListener {
++            prefs.edit().putString("gender", "FEMALE").apply()
++            GuardianBlocker.refresh(context)
++            bindGender()
++        }
++
++        // ── thresholds ────────────────────────────────────────────────────────
++        fun slider(label: TextView, slider: Slider, key: String, def: Float, fmt: (Float) -> String) {
++            slider.value = prefs.getFloat(key, def)
++            label.text = fmt(slider.value)
++            slider.addOnChangeListener { _, value, _ ->
++                prefs.edit().putFloat(key, value).apply()
++                label.text = fmt(value)
++                GuardianBlocker.refresh(context)
++            }
++        }
++        slider(
++            view.findViewById(R.id.txt_ai_threshold),
++            view.findViewById(R.id.slider_ai_threshold),
++            "ai_threshold", 0.72f,
++        ) { "%.2f".format(it) }
++        slider(
++            view.findViewById(R.id.txt_nsfw_threshold),
++            view.findViewById(R.id.slider_nsfw_threshold),
++            "nsfw_gate", 0.68f,
++        ) { "%.2f".format(it) }
++        slider(
++            view.findViewById(R.id.txt_gender_threshold),
++            view.findViewById(R.id.slider_gender_threshold),
++            "gender_threshold", 0.78f,
++        ) { "%.2f".format(it) }
++        val votesSlider = view.findViewById<Slider>(R.id.slider_grid_votes)
++        val votesLabel = view.findViewById<TextView>(R.id.txt_grid_votes)
++        votesSlider.value = prefs.getInt("grid_votes", 2).toFloat()
++        votesLabel.text = prefs.getInt("grid_votes", 2).toString()
++        votesSlider.addOnChangeListener { _, value, _ ->
++            val v = value.toInt()
++            prefs.edit().putInt("grid_votes", v).apply()
++            votesLabel.text = v.toString()
++            GuardianBlocker.refresh(context)
++        }
++
++        // ── keywords ──────────────────────────────────────────────────────────
++        val keywordInput = view.findViewById<TextInputEditText>(R.id.guardian_keyword_input)
++        val keywordList = view.findViewById<LinearLayout>(R.id.guardian_keyword_list)
++        fun refreshKeywords() {
++            keywordList.removeAllViews()
++            val kws = prefs.getStringSet("keywords", emptySet()) ?: emptySet()
++            for (kw in kws.sorted()) {
++                val row = inflater.inflate(R.layout.item_guardian_keyword, keywordList, false)
++                row.findViewById<TextView>(R.id.txt_keyword).text = kw
++                row.findViewById<MaterialButton>(R.id.btn_keyword_remove).setOnClickListener {
++                    prefs.edit().putStringSet("keywords", kws - kw).apply()
++                    GuardianBlocker.refresh(context)
++                    refreshKeywords()
++                }
++                keywordList.addView(row)
++            }
++        }
++        refreshKeywords()
++        view.findViewById<MaterialButton>(R.id.btn_keyword_add).setOnClickListener {
++            val raw = keywordInput.text?.toString()?.trim().orEmpty()
++            if (raw.isEmpty()) return@setOnClickListener
++            val kws = (prefs.getStringSet("keywords", emptySet()) ?: emptySet()).toMutableSet()
++            kws.add(raw)
++            prefs.edit().putStringSet("keywords", kws).apply()
++            GuardianBlocker.refresh(context)
++            keywordInput.text?.clear()
++            refreshKeywords()
++        }
++
++        // ── model import ──────────────────────────────────────────────────────
++        fun bindModel(label: TextView, name: String) {
++            val mgr = GuardianModelImportManager.get(context)
++            label.text = if (mgr.isModelImported(name)) {
++                getString(R.string.guardian_model_ready, mgr.modelSizeBytes(name) / 1024)
++            } else {
++                getString(R.string.guardian_model_missing)
++            }
++        }
++        bindModel(view.findViewById(R.id.txt_model_legacy), GuardianConstants.MODEL_LEGACY)
++        bindModel(view.findViewById(R.id.txt_model_nsfw), GuardianConstants.MODEL_NSFW)
++        bindModel(view.findViewById(R.id.txt_model_gender), GuardianConstants.MODEL_GENDER)
++        view.findViewById<MaterialButton>(R.id.btn_import_legacy).setOnClickListener {
++            importingModel = GuardianConstants.MODEL_LEGACY
++            openDocument.launch("*/*")
++        }
++        view.findViewById<MaterialButton>(R.id.btn_import_nsfw).setOnClickListener {
++            importingModel = GuardianConstants.MODEL_NSFW
++            openDocument.launch("*/*")
++        }
++        view.findViewById<MaterialButton>(R.id.btn_import_gender).setOnClickListener {
++            importingModel = GuardianConstants.MODEL_GENDER
++            openDocument.launch("*/*")
++        }
++
++        view.findViewById<MaterialButton>(R.id.btn_back).setOnClickListener {
++            requireActivity().onBackPressedDispatcher.onBackPressed()
++        }
++
++        return view
++    }
++}
+diff --git a/app/src/main/res/layout/fragment_guardian.xml b/app/src/main/res/layout/fragment_guardian.xml
+new file mode 100644
+index 0000000..cc07a17
+--- /dev/null
++++ b/app/src/main/res/layout/fragment_guardian.xml
+@@ -0,0 +1,407 @@
++<?xml version="1.0" encoding="utf-8"?>
++<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent">
++
++    <LinearLayout
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:orientation="vertical"
++        android:paddingHorizontal="16dp"
++        android:paddingTop="16dp"
++        android:paddingBottom="32dp">
++
++        <RelativeLayout
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content">
++
++            <com.google.android.material.button.MaterialButton
++                android:id="@+id/btn_back"
++                style="@style/Widget.Material3.Button.IconButton"
++                android:layout_width="48dp"
++                android:layout_height="48dp"
++                android:layout_alignParentStart="true"
++                android:layout_centerVertical="true"
++                app:icon="@drawable/baseline_arrow_back_ios_24"
++                app:iconTint="?attr/colorOnSurface" />
++
++            <TextView
++                android:layout_width="wrap_content"
++                android:layout_height="wrap_content"
++                android:layout_centerInParent="true"
++                android:text="@string/guardian_screen_title"
++                android:textAppearance="@style/TextAppearance.Material3.TitleLarge"
++                android:textColor="?attr/colorOnSurface" />
++        </RelativeLayout>
++
++        <TextView
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="8dp"
++            android:text="@string/guardian_screen_subtitle"
++            android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
++            android:textColor="?attr/colorOnSurfaceVariant" />
++
++        <!-- Enable -->
++        <com.google.android.material.card.MaterialCardView
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="24dp"
++            app:cardBackgroundColor="?attr/colorSurfaceContainer"
++            app:cardCornerRadius="28dp"
++            app:cardElevation="0dp"
++            app:strokeWidth="0dp">
++
++            <LinearLayout
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:gravity="center_vertical"
++                android:paddingHorizontal="24dp"
++                android:paddingVertical="20dp">
++
++                <LinearLayout
++                    android:layout_width="0dp"
++                    android:layout_height="wrap_content"
++                    android:layout_weight="1"
++                    android:orientation="vertical">
++
++                    <TextView
++                        android:layout_width="wrap_content"
++                        android:layout_height="wrap_content"
++                        android:text="@string/guardian_enable_title"
++                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
++                        android:textColor="?attr/colorOnSurface" />
++
++                    <TextView
++                        android:layout_width="wrap_content"
++                        android:layout_height="wrap_content"
++                        android:layout_marginTop="4dp"
++                        android:text="@string/guardian_enable_subtitle"
++                        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
++                        android:textColor="?attr/colorOnSurfaceVariant" />
++                </LinearLayout>
++
++                <com.google.android.material.materialswitch.MaterialSwitch
++                    android:id="@+id/guardian_enable"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content" />
++            </LinearLayout>
++        </com.google.android.material.card.MaterialCardView>
++
++        <!-- Gender -->
++        <TextView
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="28dp"
++            android:layout_marginBottom="8dp"
++            android:text="@string/guardian_gender_title"
++            android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
++            android:textColor="?attr/colorOnSurface" />
++
++        <com.google.android.material.card.MaterialCardView
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            app:cardBackgroundColor="?attr/colorSurfaceContainer"
++            app:cardCornerRadius="20dp"
++            app:cardElevation="0dp"
++            app:strokeWidth="0dp">
++
++            <LinearLayout
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:orientation="vertical"
++                android:padding="20dp">
++
++                <TextView
++                    android:id="@+id/txt_gender_value"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"
++                    android:layout_marginBottom="8dp"
++                    android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
++                    android:textColor="?attr/colorOnSurface" />
++
++                <LinearLayout
++                    android:layout_width="match_parent"
++                    android:layout_height="wrap_content"
++                    android:orientation="horizontal">
++
++                    <com.google.android.material.button.MaterialButton
++                        android:id="@+id/btn_gender_none"
++                        style="@style/Widget.Material3.Button.OutlinedButton"
++                        android:layout_width="0dp"
++                        android:layout_height="wrap_content"
++                        android:layout_marginEnd="8dp"
++                        android:layout_weight="1"
++                        android:text="@string/guardian_gender_none" />
++
++                    <com.google.android.material.button.MaterialButton
++                        android:id="@+id/btn_gender_male"
++                        style="@style/Widget.Material3.Button.OutlinedButton"
++                        android:layout_width="0dp"
++                        android:layout_height="wrap_content"
++                        android:layout_marginEnd="8dp"
++                        android:layout_weight="1"
++                        android:text="@string/guardian_gender_male" />
++
++                    <com.google.android.material.button.MaterialButton
++                        android:id="@+id/btn_gender_female"
++                        style="@style/Widget.Material3.Button.OutlinedButton"
++                        android:layout_width="0dp"
++                        android:layout_height="wrap_content"
++                        android:layout_weight="1"
++                        android:text="@string/guardian_gender_female" />
++                </LinearLayout>
++            </LinearLayout>
++        </com.google.android.material.card.MaterialCardView>
++
++        <!-- Thresholds -->
++        <TextView
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="28dp"
++            android:layout_marginBottom="8dp"
++            android:text="@string/guardian_thresholds_title"
++            android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
++            android:textColor="?attr/colorOnSurface" />
++
++        <com.google.android.material.card.MaterialCardView
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            app:cardBackgroundColor="?attr/colorSurfaceContainer"
++            app:cardCornerRadius="20dp"
++            app:cardElevation="0dp"
++            app:strokeWidth="0dp">
++
++            <LinearLayout
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:orientation="vertical"
++                android:padding="20dp">
++
++                <TextView
++                    android:id="@+id/txt_ai_threshold"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"
++                    android:textAppearance="@style/TextAppearance.Material3.LabelLarge"
++                    android:textColor="?attr/colorOnSurface" />
++
++                <com.google.android.material.slider.Slider
++                    android:id="@+id/slider_ai_threshold"
++                    android:layout_width="match_parent"
++                    android:layout_height="wrap_content"
++                    android:stepSize="0.01"
++                    android:valueFrom="0.30"
++                    android:valueTo="0.95" />
++
++                <TextView
++                    android:id="@+id/txt_nsfw_threshold"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"
++                    android:layout_marginTop="8dp"
++                    android:textAppearance="@style/TextAppearance.Material3.LabelLarge"
++                    android:textColor="?attr/colorOnSurface" />
++
++                <com.google.android.material.slider.Slider
++                    android:id="@+id/slider_nsfw_threshold"
++                    android:layout_width="match_parent"
++                    android:layout_height="wrap_content"
++                    android:stepSize="0.01"
++                    android:valueFrom="0.30"
++                    android:valueTo="0.95" />
++
++                <TextView
++                    android:id="@+id/txt_gender_threshold"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"
++                    android:layout_marginTop="8dp"
++                    android:textAppearance="@style/TextAppearance.Material3.LabelLarge"
++                    android:textColor="?attr/colorOnSurface" />
++
++                <com.google.android.material.slider.Slider
++                    android:id="@+id/slider_gender_threshold"
++                    android:layout_width="match_parent"
++                    android:layout_height="wrap_content"
++                    android:stepSize="0.01"
++                    android:valueFrom="0.50"
++                    android:valueTo="0.95" />
++
++                <TextView
++                    android:id="@+id/txt_grid_votes"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"
++                    android:layout_marginTop="8dp"
++                    android:textAppearance="@style/TextAppearance.Material3.LabelLarge"
++                    android:textColor="?attr/colorOnSurface" />
++
++                <com.google.android.material.slider.Slider
++                    android:id="@+id/slider_grid_votes"
++                    android:layout_width="match_parent"
++                    android:layout_height="wrap_content"
++                    android:stepSize="1"
++                    android:valueFrom="1"
++                    android:valueTo="4" />
++            </LinearLayout>
++        </com.google.android.material.card.MaterialCardView>
++
++        <!-- Keywords -->
++        <TextView
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="28dp"
++            android:layout_marginBottom="8dp"
++            android:text="@string/guardian_keywords_title"
++            android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
++            android:textColor="?attr/colorOnSurface" />
++
++        <com.google.android.material.textfield.TextInputLayout
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:hint="@string/guardian_keyword_hint"
++            app:endIconMode="custom"
++            app:endIconDrawable="@drawable/baseline_add_24">
++
++            <com.google.android.material.textfield.TextInputEditText
++                android:id="@+id/guardian_keyword_input"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:inputType="text"
++                android:maxLines="1" />
++        </com.google.android.material.textfield.TextInputLayout>
++
++        <com.google.android.material.button.MaterialButton
++            android:id="@+id/btn_keyword_add"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="8dp"
++            android:text="@string/guardian_keyword_add" />
++
++        <LinearLayout
++            android:id="@+id/guardian_keyword_list"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="12dp"
++            android:orientation="vertical" />
++
++        <!-- Models -->
++        <TextView
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="28dp"
++            android:layout_marginBottom="8dp"
++            android:text="@string/guardian_models_title"
++            android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
++            android:textColor="?attr/colorOnSurface" />
++
++        <com.google.android.material.card.MaterialCardView
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_marginBottom="8dp"
++            app:cardBackgroundColor="?attr/colorSurfaceContainer"
++            app:cardCornerRadius="20dp"
++            app:cardElevation="0dp"
++            app:strokeWidth="0dp">
++
++            <LinearLayout
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:gravity="center_vertical"
++                android:padding="20dp">
++
++                <LinearLayout
++                    android:layout_width="0dp"
++                    android:layout_height="wrap_content"
++                    android:layout_weight="1"
++                    android:orientation="vertical">
++
++                    <TextView
++                        android:id="@+id/txt_model_legacy"
++                        android:layout_width="wrap_content"
++                        android:layout_height="wrap_content"
++                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
++                        android:textColor="?attr/colorOnSurface" />
++                </LinearLayout>
++
++                <com.google.android.material.button.MaterialButton
++                    android:id="@+id/btn_import_legacy"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"
++                    android:text="@string/guardian_import" />
++            </LinearLayout>
++        </com.google.android.material.card.MaterialCardView>
++
++        <com.google.android.material.card.MaterialCardView
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_marginBottom="8dp"
++            app:cardBackgroundColor="?attr/colorSurfaceContainer"
++            app:cardCornerRadius="20dp"
++            app:cardElevation="0dp"
++            app:strokeWidth="0dp">
++
++            <LinearLayout
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:gravity="center_vertical"
++                android:padding="20dp">
++
++                <LinearLayout
++                    android:layout_width="0dp"
++                    android:layout_height="wrap_content"
++                    android:layout_weight="1"
++                    android:orientation="vertical">
++
++                    <TextView
++                        android:id="@+id/txt_model_nsfw"
++                        android:layout_width="wrap_content"
++                        android:layout_height="wrap_content"
++                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
++                        android:textColor="?attr/colorOnSurface" />
++                </LinearLayout>
++
++                <com.google.android.material.button.MaterialButton
++                    android:id="@+id/btn_import_nsfw"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"
++                    android:text="@string/guardian_import" />
++            </LinearLayout>
++        </com.google.android.material.card.MaterialCardView>
++
++        <com.google.android.material.card.MaterialCardView
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            app:cardBackgroundColor="?attr/colorSurfaceContainer"
++            app:cardCornerRadius="20dp"
++            app:cardElevation="0dp"
++            app:strokeWidth="0dp">
++
++            <LinearLayout
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:gravity="center_vertical"
++                android:padding="20dp">
++
++                <LinearLayout
++                    android:layout_width="0dp"
++                    android:layout_height="wrap_content"
++                    android:layout_weight="1"
++                    android:orientation="vertical">
++
++                    <TextView
++                        android:id="@+id/txt_model_gender"
++                        android:layout_width="wrap_content"
++                        android:layout_height="wrap_content"
++                        android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
++                        android:textColor="?attr/colorOnSurface" />
++                </LinearLayout>
++
++                <com.google.android.material.button.MaterialButton
++                    android:id="@+id/btn_import_gender"
++                    android:layout_width="wrap_content"
++                    android:layout_height="wrap_content"
++                    android:text="@string/guardian_import" />
++            </LinearLayout>
++        </com.google.android.material.card.MaterialCardView>
++
++    </LinearLayout>
++</androidx.core.widget.NestedScrollView>
+diff --git a/app/src/main/res/layout/fragment_reducers.xml b/app/src/main/res/layout/fragment_reducers.xml
+index fcc7d3f..e9fd718 100644
+--- a/app/src/main/res/layout/fragment_reducers.xml
++++ b/app/src/main/res/layout/fragment_reducers.xml
+@@ -240,6 +240,69 @@
+             android:layout_marginBottom="20dp"
+             android:layout_marginTop="8dp"/>
+ 
++        <com.google.android.material.card.MaterialCardView
++            android:id="@+id/card_guardian"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_marginBottom="20dp"
++            app:cardBackgroundColor="?attr/colorSurfaceContainer"
++            app:cardCornerRadius="16dp"
++            app:cardElevation="0dp"
++            app:strokeWidth="0dp">
++
++            <LinearLayout
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:gravity="center_vertical"
++                android:padding="20dp">
++
++                <com.google.android.material.card.MaterialCardView
++                    android:layout_width="48dp"
++                    android:layout_height="48dp"
++                    app:cardBackgroundColor="?attr/colorTertiaryContainer"
++                    app:cardCornerRadius="14dp"
++                    app:cardElevation="0dp"
++                    app:strokeWidth="0dp">
++
++                    <ImageView
++                        android:layout_width="24dp"
++                        android:layout_height="24dp"
++                        android:layout_gravity="center"
++                        android:src="@drawable/ic_block_aesthetic"
++                        app:tint="?attr/colorTertiary" />
++                </com.google.android.material.card.MaterialCardView>
++
++                <LinearLayout
++                    android:layout_width="0dp"
++                    android:layout_height="wrap_content"
++                    android:layout_marginStart="16dp"
++                    android:layout_weight="1"
++                    android:orientation="vertical">
++
++                    <TextView
++                        android:layout_width="wrap_content"
++                        android:layout_height="wrap_content"
++                        android:text="@string/guardian_card_title"
++                        android:textColor="?attr/colorOnSurface"
++                        android:textSize="16sp"
++                        android:textStyle="bold" />
++
++                    <TextView
++                        android:layout_width="wrap_content"
++                        android:layout_height="wrap_content"
++                        android:text="@string/guardian_card_subtitle"
++                        android:textColor="?attr/colorOnSurfaceVariant"
++                        android:textSize="13sp" />
++                </LinearLayout>
++
++                <ImageView
++                    android:layout_width="16dp"
++                    android:layout_height="16dp"
++                    android:src="@drawable/baseline_arrow_forward_ios_24"
++                    app:tint="?attr/colorOutline" />
++            </LinearLayout>
++        </com.google.android.material.card.MaterialCardView>
++
+         <com.google.android.material.card.MaterialCardView
+             android:id="@+id/card_autodnd"
+             android:layout_width="match_parent"
+diff --git a/app/src/main/res/layout/item_guardian_keyword.xml b/app/src/main/res/layout/item_guardian_keyword.xml
+new file mode 100644
+index 0000000..5fa6da6
+--- /dev/null
++++ b/app/src/main/res/layout/item_guardian_keyword.xml
+@@ -0,0 +1,25 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    android:layout_width="match_parent"
++    android:layout_height="wrap_content"
++    android:gravity="center_vertical"
++    android:orientation="horizontal"
++    android:paddingVertical="4dp">
++
++    <TextView
++        android:id="@+id/txt_keyword"
++        android:layout_width="0dp"
++        android:layout_height="wrap_content"
++        android:layout_weight="1"
++        android:textAppearance="@style/TextAppearance.Material3.BodyLarge"
++        android:textColor="?attr/colorOnSurface" />
++
++    <com.google.android.material.button.MaterialButton
++        android:id="@+id/btn_keyword_remove"
++        style="@style/Widget.Material3.Button.IconButton"
++        android:layout_width="40dp"
++        android:layout_height="40dp"
++        app:icon="@drawable/baseline_close_24"
++        app:iconTint="?attr/colorError" />
++</LinearLayout>
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index 06a8006..be40ef5 100755
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -1697,4 +1697,26 @@
+     <string name="unit_minutes">Minutes</string>
+     <string name="unit_hours">Hours</string>
+     <string name="unit_days">Days</string>
++
++    <!-- Guardian (NSFW content blocking) -->
++    <string name="guardian_screen_title">Guardian AI</string>
++    <string name="guardian_screen_subtitle">On-device NSFW content blocking using AI detection.</string>
++    <string name="guardian_enable_title">NSFW content blocking</string>
++    <string name="guardian_enable_subtitle">Scan the screen and block explicit content in real time.</string>
++    <string name="guardian_gender_title">Your gender</string>
++    <string name="guardian_gender_none">None</string>
++    <string name="guardian_gender_male">Male</string>
++    <string name="guardian_gender_female">Female</string>
++    <string name="guardian_thresholds_title">Detection sensitivity</string>
++    <string name="guardian_keywords_title">NSFW keywords</string>
++    <string name="guardian_keyword_hint">Add a keyword or regex (regex:&#8230;)</string>
++    <string name="guardian_keyword_add">Add keyword</string>
++    <string name="guardian_models_title">AI models</string>
++    <string name="guardian_import">Import</string>
++    <string name="guardian_model_ready">Imported (%1$d KB)</string>
++    <string name="guardian_model_missing">Not imported</string>
++    <string name="guardian_model_imported">Imported %1$s</string>
++    <string name="guardian_model_import_failed">Import failed for %1$s</string>
++    <string name="guardian_card_title">Guardian AI</string>
++    <string name="guardian_card_subtitle">Block NSFW content</string>
+ </resources>
