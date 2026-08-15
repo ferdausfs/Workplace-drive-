@@ -267,3 +267,17 @@ User report: "onek besi false block kore"। Code-এ ৬টা স্পষ্�
   ⚠️ sandbox-এ SDK নেই — compile হয়নি, CI=truth।
 - Reports: `reports/Dogs_of_KAHAF_BUG_AUDIT_2026-08-15.md` + PR body `pr/PR_BODY_ci_fix.md`।
 - **Next:** productivity feature roadmap (user priority নিতে হবে)।
+
+---
+
+## 21. Dogs-of-KAHAF v2.4.0 — safe/unsafe + gender removal (PR-ready)
+
+- **User final spec:** ৩ mode না, gender-ও না। শুধু **safe vs unsafe** (২ class) + gender detection
+  পুরো বাদ + stable (false block কম)।
+- **Changes (8 file, +31/−532):** AiDetector (gender/nsfw interpreter + isOppositeGenderNsfw + score
+  extractor বাদ, threshold floor 0.80→coerceIn(0.50,0.95), vote +1→coerceIn(1,4)); Service (২ gender
+  call site বাদ, legacy-only); Settings UI (gender chips/sliders/model import বাদ, XML sections সরানো);
+  ViewModel/Preferences (gender keys/flows বাদ); version 2.4.0; CI release dynamic tag।
+- **Verify:** brace/paren 0 (৪ file), XML valid, dangling gender/nsfw refs = 0। ⚠️ compile=CI।
+- patch: `pr/v240_safeunsafe.patch` (sha 5b525591…), PR body `pr/PR_BODY_v240_safeunsafe.md`।
+- **Next:** merge → CI build → device test → threshold tune (slider-ই এখন, floor নেই)।

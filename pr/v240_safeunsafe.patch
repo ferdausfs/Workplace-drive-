@@ -1,0 +1,886 @@
+diff --git a/.github/workflows/build.yml b/.github/workflows/build.yml
+index 949a900..715c76e 100644
+--- a/.github/workflows/build.yml
++++ b/.github/workflows/build.yml
+@@ -16,17 +16,18 @@ jobs:
+       - name: Checkout code
+         uses: actions/checkout@v4
+ 
+-      -
++      - name: Set up JDK 17
+         uses: actions/setup-java@v4
+         with:
+           java-version: '17'
+           distribution: 'temurin'
+ 
+-      - name: Download Gradle wrapper jar
++      - name: Read app version
++        id: version
+         run: |
+-          mkdir -p gradle/wrapper
+-          curl -fsSL -o gradle/wrapper/gradle-wrapper.jar \
+-            https://github.com/gradle/gradle/raw/v8.4.0/gradle/wrapper/gradle-wrapper.jar
++          V=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -1)
++          echo "version=$V" >> "$GITHUB_OUTPUT"
++          echo "App version: $V"
+ 
+       - name: Setup Gradle
+         uses: gradle/actions/setup-gradle@v3
+@@ -56,7 +57,7 @@ jobs:
+       - name: Upload Artifact
+         uses: actions/upload-artifact@v4
+         with:
+-          name: guardian-shield-release-v2.2.0
++          name: guardian-shield-release-v${{ steps.version.outputs.version }}
+           path: app/build/outputs/apk/release/*.apk
+           retention-days: 90
+ 
+@@ -64,17 +65,15 @@ jobs:
+         uses: softprops/action-gh-release@v2
+         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+         with:
+-          tag_name: v2.2.0
+-          name: Guardian Shield v2.2.0
++          tag_name: v${{ steps.version.outputs.version }}
++          name: Guardian Shield v${{ steps.version.outputs.version }}
+           body: |
+-            ### What's New
+-            - 🔒 Commitment Lock: indefinite lock + cooldown unlock system
+-            - 🛡️ Device Admin bypass blocked via AccessibilityService
+-            - 📥 Model import fixed (any valid .tflite file)
+-            - 🔐 App / Keyword / Schedule screens fully locked during commitment
+-            - ⚡ Protection toggle blocked during active lock
++            ### Guardian Shield v${{ steps.version.outputs.version }}
++            Automated release build from main.
++
++            APK is attached below.
+           files: app/build/outputs/apk/release/*.apk
+           draft: false
+           prerelease: false
+         env:
+-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+\ No newline at end of file
++          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index be000d8..e205e04 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -13,8 +13,8 @@ android {
+         applicationId = "com.guardian.shield"
+         minSdk = 26
+         targetSdk = 35
+-        versionCode = 8
+-        versionName = "2.3.1"
++        versionCode = 9
++        versionName = "2.4.0"
+         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+         vectorDrawables { useSupportLibrary = true }
+     }
+diff --git a/app/src/main/java/com/guardian/shield/data/local/datastore/GuardianPreferences.kt b/app/src/main/java/com/guardian/shield/data/local/datastore/GuardianPreferences.kt
+index ad348bc..a53b645 100644
+--- a/app/src/main/java/com/guardian/shield/data/local/datastore/GuardianPreferences.kt
++++ b/app/src/main/java/com/guardian/shield/data/local/datastore/GuardianPreferences.kt
+@@ -26,15 +26,12 @@ class GuardianPreferences @Inject constructor(
+         val AI_DETECTION = booleanPreferencesKey("ai_detection")
+         val DELAY_SECONDS = intPreferencesKey("delay_seconds")
+         val FIRST_RUN = booleanPreferencesKey("first_run")
+-        val USER_GENDER = stringPreferencesKey("user_gender")
+         val RULES_VERSION = intPreferencesKey("rules_version")
+         val PROTECTION_ENABLED = booleanPreferencesKey("protection_enabled")
+         val TEMP_BLOCK_DURATION_MINS = intPreferencesKey("temp_block_duration_mins")
+ 
+-        // ✅ AI Thresholds — সব DataStore এ
++        // AI Threshold — DataStore এ
+         val AI_THRESHOLD = floatPreferencesKey("ai_threshold")
+-        val NSFW_GATE_THRESHOLD = floatPreferencesKey("nsfw_gate_threshold")
+-        val GENDER_THRESHOLD = floatPreferencesKey("gender_threshold")
+         val GRID_VOTE_COUNT = intPreferencesKey("grid_vote_count")
+     }
+ 
+@@ -43,15 +40,12 @@ class GuardianPreferences @Inject constructor(
+     val aiDetection: Flow<Boolean> = ds.data.map { it[Keys.AI_DETECTION] ?: false }
+     val delaySeconds: Flow<Int> = ds.data.map { it[Keys.DELAY_SECONDS] ?: 30 }
+     val firstRun: Flow<Boolean> = ds.data.map { it[Keys.FIRST_RUN] ?: true }
+-    val userGender: Flow<String> = ds.data.map { it[Keys.USER_GENDER] ?: "NONE" }
+     val rulesVersion: Flow<Int> = ds.data.map { it[Keys.RULES_VERSION] ?: 0 }
+     val protectionEnabled: Flow<Boolean> = ds.data.map { it[Keys.PROTECTION_ENABLED] ?: true }
+     val tempBlockDurationMins: Flow<Int> = ds.data.map { it[Keys.TEMP_BLOCK_DURATION_MINS] ?: 15 }
+ 
+     // ✅ AI Threshold flows — সব adjustable
+     val aiThreshold: Flow<Float> = ds.data.map { it[Keys.AI_THRESHOLD] ?: 0.72f }
+-    val nsfwGateThreshold: Flow<Float> = ds.data.map { it[Keys.NSFW_GATE_THRESHOLD] ?: 0.68f }
+-    val genderThreshold: Flow<Float> = ds.data.map { it[Keys.GENDER_THRESHOLD] ?: 0.78f }
+     val gridVoteCount: Flow<Int> = ds.data.map { it[Keys.GRID_VOTE_COUNT] ?: 2 }
+ 
+     // Setters
+@@ -59,12 +53,9 @@ class GuardianPreferences @Inject constructor(
+     suspend fun setAiDetection(v: Boolean) { ds.edit { it[Keys.AI_DETECTION] = v } }
+     suspend fun setDelaySeconds(v: Int) { ds.edit { it[Keys.DELAY_SECONDS] = v } }
+     suspend fun setFirstRun(v: Boolean) { ds.edit { it[Keys.FIRST_RUN] = v } }
+-    suspend fun setUserGender(v: String) { ds.edit { it[Keys.USER_GENDER] = v } }
+     suspend fun setProtectionEnabled(v: Boolean) { ds.edit { it[Keys.PROTECTION_ENABLED] = v } }
+     suspend fun setTempBlockDurationMins(v: Int) { ds.edit { it[Keys.TEMP_BLOCK_DURATION_MINS] = v } }
+     suspend fun setAiThreshold(v: Float) { ds.edit { it[Keys.AI_THRESHOLD] = v } }
+-    suspend fun setNsfwGateThreshold(v: Float) { ds.edit { it[Keys.NSFW_GATE_THRESHOLD] = v } }
+-    suspend fun setGenderThreshold(v: Float) { ds.edit { it[Keys.GENDER_THRESHOLD] = v } }
+     suspend fun setGridVoteCount(v: Int) { ds.edit { it[Keys.GRID_VOTE_COUNT] = v } }
+     suspend fun bumpRulesVersion() {
+         ds.edit { it[Keys.RULES_VERSION] = (it[Keys.RULES_VERSION] ?: 0) + 1 }
+diff --git a/app/src/main/java/com/guardian/shield/service/accessibility/GuardianAccessibilityService.kt b/app/src/main/java/com/guardian/shield/service/accessibility/GuardianAccessibilityService.kt
+index 02555ea..1afa584 100644
+--- a/app/src/main/java/com/guardian/shield/service/accessibility/GuardianAccessibilityService.kt
++++ b/app/src/main/java/com/guardian/shield/service/accessibility/GuardianAccessibilityService.kt
+@@ -520,19 +520,6 @@ class GuardianAccessibilityService : AccessibilityService() {
+             var regionBmp: Bitmap? = null
+             try {
+                 regionBmp = Bitmap.createBitmap(fullBitmap, left, top, width, height)
+-                val gender = aiDetector.cachedUserGender
+-
+-                if (gender != "NONE" && aiDetector.isGenderModelAvailable() && aiDetector.isNsfwGateAvailable()) {
+-                    if (aiDetector.isOppositeGenderNsfw(regionBmp, gender)) {
+-                        if (currentPackage == pkg) {
+-                            withContext(Dispatchers.Main) {
+-                                goHomeAndBlock(pkg, BlockReason.AI_DETECTION, "content-aware-gender")
+-                            }
+-                            return true
+-                        }
+-                    }
+-                }
+-
+                 if (aiDetector.isLegacyAvailable() && aiDetector.isUnsafe(regionBmp)) {
+                     if (currentPackage == pkg) {
+                         withContext(Dispatchers.Main) {
+@@ -598,23 +585,7 @@ class GuardianAccessibilityService : AccessibilityService() {
+                                 }
+ 
+                                 if (!blocked) {
+-                                    val gender = aiDetector.cachedUserGender
+-
+-                                    if (gender != "NONE"
+-                                        && aiDetector.isGenderModelAvailable()
+-                                        && aiDetector.isNsfwGateAvailable()
+-                                    ) {
+-                                        if (aiDetector.isOppositeGenderNsfw(b, gender, requireStrongNsfw = true)) {
+-                                            // ✅ Final sanity check before blocking
+-                                            if (currentPackage == pkg) {
+-                                                withContext(Dispatchers.Main) {
+-                                                    goHomeAndBlock(pkg, BlockReason.AI_DETECTION, "gender-nsfw")
+-                                                }
+-                                                blocked = true
+-                                            }
+-                                        }
+-                                    }
+-                                    if (!blocked && aiDetector.isLegacyAvailable()) {
++                                    if (aiDetector.isLegacyAvailable()) {
+                                         if (aiDetector.isUnsafe(b)) {
+                                             // ✅ Final sanity check before blocking
+                                             if (currentPackage == pkg) {
+diff --git a/app/src/main/java/com/guardian/shield/service/detection/AiDetector.kt b/app/src/main/java/com/guardian/shield/service/detection/AiDetector.kt
+index 364fb85..a21d7a0 100644
+--- a/app/src/main/java/com/guardian/shield/service/detection/AiDetector.kt
++++ b/app/src/main/java/com/guardian/shield/service/detection/AiDetector.kt
+@@ -33,8 +33,6 @@ class AiDetector @Inject constructor(
+ ) {
+     private val inferenceLock = Mutex()
+     private var legacyInterpreter: Interpreter? = null
+-    private var nsfwInterpreter: Interpreter? = null
+-    private var genderInterpreter: Interpreter? = null
+     private var gpuDelegate: GpuDelegate? = null
+ 
+     // REUSABLE BUFFERS to reduce GC pressure
+@@ -48,14 +46,8 @@ class AiDetector @Inject constructor(
+ 
+     @Volatile var cachedAiEnabled: Boolean = false
+         private set
+-    @Volatile var cachedUserGender: String = "NONE"
+-        private set
+     @Volatile var cachedThreshold: Float = 0.65f
+         private set
+-    @Volatile var cachedNsfwGateThreshold: Float = 0.60f
+-        private set
+-    @Volatile var cachedGenderThreshold: Float = 0.70f
+-        private set
+     @Volatile var cachedGridVoteCount: Int = 2
+         private set
+ 
+@@ -66,30 +58,12 @@ class AiDetector @Inject constructor(
+                 catch (t: Throwable) { Timber.e(t); delay(1_000) }
+             }
+         }
+-        scope.launch {
+-            while (isActive) {
+-                try { prefs.userGender.collect { cachedUserGender = it } }
+-                catch (t: Throwable) { Timber.e(t); delay(1_000) }
+-            }
+-        }
+         scope.launch {
+             while (isActive) {
+                 try { prefs.aiThreshold.collect { cachedThreshold = it } }
+                 catch (t: Throwable) { Timber.e(t); delay(1_000) }
+             }
+         }
+-        scope.launch {
+-            while (isActive) {
+-                try { prefs.nsfwGateThreshold.collect { cachedNsfwGateThreshold = it } }
+-                catch (t: Throwable) { Timber.e(t); delay(1_000) }
+-            }
+-        }
+-        scope.launch {
+-            while (isActive) {
+-                try { prefs.genderThreshold.collect { cachedGenderThreshold = it } }
+-                catch (t: Throwable) { Timber.e(t); delay(1_000) }
+-            }
+-        }
+         scope.launch {
+             while (isActive) {
+                 try { prefs.gridVoteCount.collect { cachedGridVoteCount = it } }
+@@ -99,15 +73,11 @@ class AiDetector @Inject constructor(
+     }
+ 
+     fun isLegacyAvailable(): Boolean = legacyInterpreter != null
+-    fun isGenderModelAvailable(): Boolean = genderInterpreter != null
+-    fun isNsfwGateAvailable(): Boolean = nsfwInterpreter != null
+ 
+     suspend fun ensureLoaded() {
+         inferenceLock.withLock {
+             if (legacyInterpreter == null) legacyInterpreter = tryLoad(MODEL_LEGACY)
+-            if (nsfwInterpreter == null) nsfwInterpreter = tryLoad(MODEL_NSFW)
+-            if (genderInterpreter == null) genderInterpreter = tryLoad(MODEL_GENDER)
+-            Timber.d("Models: legacy=${legacyInterpreter != null} nsfw=${nsfwInterpreter != null} gender=${genderInterpreter != null}")
++            Timber.d("Models: legacy=${legacyInterpreter != null}")
+         }
+     }
+ 
+@@ -120,17 +90,11 @@ class AiDetector @Inject constructor(
+         try {
+             Timber.w("Rebuilding AI interpreters on CPU after $consecutiveInferenceFails failures")
+             try { legacyInterpreter?.close() } catch (_: Throwable) {}
+-            try { nsfwInterpreter?.close() } catch (_: Throwable) {}
+-            try { genderInterpreter?.close() } catch (_: Throwable) {}
+             try { gpuDelegate?.close() } catch (_: Throwable) {}
+             legacyInterpreter = null
+-            nsfwInterpreter = null
+-            genderInterpreter = null
+             gpuDelegate = null
+ 
+             legacyInterpreter = tryLoad(MODEL_LEGACY, forceCpu = true)
+-            nsfwInterpreter = tryLoad(MODEL_NSFW, forceCpu = true)
+-            genderInterpreter = tryLoad(MODEL_GENDER, forceCpu = true)
+             consecutiveInferenceFails = 0
+         } catch (t: Throwable) {
+             Timber.e(t, "rebuildAllOnCpu failed")
+@@ -209,9 +173,9 @@ class AiDetector @Inject constructor(
+                 if (!isImageComplex(bitmap)) return@withLock false
+ 
+                 // Increased local threshold for "Safe First"
+-                val threshold = cachedThreshold.coerceAtLeast(0.80f)
++                val threshold = cachedThreshold.coerceIn(0.50f, 0.95f)
+                 // Ultimate Level: Require sufficient votes but sensitive to small fragments
+-                val voteNeeded = (cachedGridVoteCount + 1).coerceAtMost(4)
++                val voteNeeded = cachedGridVoteCount.coerceIn(1, 4)
+ 
+                 val fullScore = extractGuardianScore(runInferenceSafe(interp, bitmap)
+                     ?: return@withLock false)
+@@ -259,101 +223,6 @@ class AiDetector @Inject constructor(
+         }
+     }
+ 
+-    suspend fun isOppositeGenderNsfw(
+-        bitmap: Bitmap,
+-        userGender: String,
+-        requireStrongNsfw: Boolean = false
+-    ): Boolean {
+-        val nsfw = nsfwInterpreter ?: return false
+-        val gender = genderInterpreter ?: return false
+-        if (userGender != "MALE" && userGender != "FEMALE") return false
+-
+-        return inferenceLock.withLock {
+-            try {
+-                if (!isImageComplex(bitmap)) return@withLock false
+-
+-                val currentGender = runCatching {
+-                    prefs.userGender.first()
+-                }.getOrElse { userGender }
+-                if (currentGender != "MALE" && currentGender != "FEMALE") return@withLock false
+-
+-                // FALSE-BLOCK FIX: whole-screen screenshots are noisy (UI chrome,
+-                // text, many small images). Callers that scan a FULL screenshot
+-                // pass requireStrongNsfw=true so the NSFW gate is raised to 0.80
+-                // before the gender model is consulted. Content regions keep the
+-                // normal gate.
+-                val nsfwGate = if (requireStrongNsfw) {
+-                    maxOf(cachedNsfwGateThreshold, 0.80f)
+-                } else {
+-                    cachedNsfwGateThreshold
+-                }
+-                val genderConf = cachedGenderThreshold
+-                val voteNeeded = cachedGridVoteCount
+-
+-                val initial = runInferenceSafe(nsfw, bitmap) ?: return@withLock false
+-                var maxNsfwScore = extractNsfwGateScore(initial)
+-                Timber.d("NSFW gate full: $maxNsfwScore / $nsfwGate")
+-
+-                if (maxNsfwScore < nsfwGate) {
+-                    // NO FALSE DETECTION: Only grid-scan large bitmaps
+-                    if (bitmap.width >= 500 && bitmap.height >= 500) {
+-                        val regions = splitIntoOverlappingGrid(bitmap, cols = 4, rows = 5, overlapPercent = 0.25f)
+-                        var nsfwVotes = 0
+-                        for ((idx, region) in regions.withIndex()) {
+-                            if (!isImageComplex(region)) {
+-                                region.recycle()
+-                                continue
+-                            }
+-                            try {
+-                                val out = runInferenceSafe(nsfw, region) ?: continue
+-                                val score = extractNsfwGateScore(out)
+-                                Timber.d("NSFW Grid[$idx]: $score")
+-                                if (score > maxNsfwScore) maxNsfwScore = score
+-
+-                                if (score >= nsfwGate) nsfwVotes++
+-                                if (nsfwVotes >= voteNeeded) break
+-                            } catch (t: Throwable) {
+-                                Timber.e(t, "NSFW Grid[$idx] error")
+-                            } finally {
+-                                region.recycle()
+-                            }
+-                        }
+-                        if (maxNsfwScore < nsfwGate && nsfwVotes < voteNeeded) {
+-                            return@withLock false
+-                        }
+-                    } else {
+-                        return@withLock false
+-                    }
+-                }
+-
+-                val genderScores = runInferenceSafe(gender, bitmap) ?: return@withLock false
+-                val half = genderScores.size / 2
+-                val firstSum = genderScores.take(half).sum()
+-                val secondSum = genderScores.drop(half).sum()
+-                val total = (firstSum + secondSum).coerceAtLeast(0.001f)
+-                val femaleProb = firstSum / total
+-                val maleProb = secondSum / total
+-
+-                Timber.d("Gender: male=$maleProb female=$femaleProb conf=$genderConf user=$currentGender")
+-
+-                // FALSE-BLOCK FIX (2026-08-15): the old "hybrid soft" path lowered the
+-                // gender confidence bar to 0.62 for any image with a weak 0.58 NSFW
+-                // score, which blocked fully-clothed people in avatars, thumbnails and
+-                // feed content. The opposite-gender block now requires the FULL gender
+-                // confidence. The NSFW gate (>= nsfwGate) already ran above, so real
+-                // NSFW with a clearly opposite-gender subject still blocks.
+-                when (currentGender) {
+-                    "MALE" -> femaleProb >= genderConf
+-                    "FEMALE" -> maleProb >= genderConf
+-                    else -> false
+-                }
+-            } catch (t: Throwable) {
+-                Timber.e(t, "Gender NSFW failed")
+-                false
+-            }
+-        }
+-    }
+-
+     private fun splitIntoOverlappingGrid(
+         bitmap: Bitmap,
+         cols: Int,
+@@ -412,19 +281,6 @@ class AiDetector @Inject constructor(
+         }
+     }
+ 
+-    private fun extractNsfwGateScore(scores: FloatArray): Float {
+-        return when (scores.size) {
+-            1 -> scores[0]
+-            2 -> scores[1]
+-            5 -> maxOf(
+-                scores.getOrElse(1){0f},
+-                scores.getOrElse(3){0f},
+-                scores.getOrElse(4){0f}
+-            )
+-            else -> scores.drop(1).max()
+-        }
+-    }
+-
+     /**
+      * Complexity check to ignore simple/blank images that often cause AI false positives.
+      * Uses color variance and sampling to ensure we only scan photographic content.
+@@ -541,12 +397,8 @@ class AiDetector @Inject constructor(
+ 
+     private fun tearDown() {
+         try { legacyInterpreter?.close() } catch (_: Throwable) {}
+-        try { nsfwInterpreter?.close() } catch (_: Throwable) {}
+-        try { genderInterpreter?.close() } catch (_: Throwable) {}
+         try { gpuDelegate?.close() } catch (_: Throwable) {}
+         legacyInterpreter = null
+-        nsfwInterpreter = null
+-        genderInterpreter = null
+         gpuDelegate = null
+         inputBuffer = null
+         pixelsArray = null
+@@ -554,7 +406,5 @@ class AiDetector @Inject constructor(
+ 
+     companion object {
+         const val MODEL_LEGACY = "guardian_model.tflite"
+-        const val MODEL_NSFW = "nsfw_model.tflite"
+-        const val MODEL_GENDER = "gender_model.tflite"
+     }
+ }
+diff --git a/app/src/main/java/com/guardian/shield/ui/settings/SettingsActivity.kt b/app/src/main/java/com/guardian/shield/ui/settings/SettingsActivity.kt
+index 9ea323f..8d41591 100644
+--- a/app/src/main/java/com/guardian/shield/ui/settings/SettingsActivity.kt
++++ b/app/src/main/java/com/guardian/shield/ui/settings/SettingsActivity.kt
+@@ -87,13 +87,11 @@ class SettingsActivity : AppCompatActivity() {
+         // ✅ Enable/disable all controls based on lock state
+         listOf(
+             binding.switchKeyword, binding.switchAi,
+-            binding.sliderGuardianThreshold, binding.sliderNsfwThreshold,
+-            binding.sliderGenderThreshold, binding.sliderDelay,
+-            binding.chipMale, binding.chipFemale, binding.chipNone,
++            binding.sliderGuardianThreshold, binding.sliderDelay,
+             binding.chip15min, binding.chip30min, binding.chip60min,
+             binding.chipVote1, binding.chipVote2, binding.chipVote3, binding.chipVote4,
+-            binding.btnImportLegacy, binding.btnImportNsfw, binding.btnImportGender,
+-            binding.btnRemoveLegacy, binding.btnRemoveNsfw, binding.btnRemoveGender,
++            binding.btnImportLegacy,
++            binding.btnRemoveLegacy,
+             binding.btnChangePin
+         ).forEach { it.isEnabled = editEnabled }
+ 
+@@ -124,37 +122,12 @@ class SettingsActivity : AppCompatActivity() {
+                 }
+             )
+ 
+-            // ✅ NSFW gate threshold
+-            binding.sliderNsfwThreshold.addOnChangeListener(
+-                Slider.OnChangeListener { _, value, fromUser ->
+-                    if (fromUser) {
+-                        viewModel.setNsfwGateThreshold(value)
+-                        binding.txtNsfwThresholdValue.text = "%.2f".format(value)
+-                    }
+-                }
+-            )
+-
+-            // ✅ Gender confidence threshold
+-            binding.sliderGenderThreshold.addOnChangeListener(
+-                Slider.OnChangeListener { _, value, fromUser ->
+-                    if (fromUser) {
+-                        viewModel.setGenderThreshold(value)
+-                        binding.txtGenderThresholdValue.text = "%.2f".format(value)
+-                    }
+-                }
+-            )
+-
+             // ✅ Grid vote count chips
+             binding.chipVote1.setOnClickListener { viewModel.setGridVoteCount(1) }
+             binding.chipVote2.setOnClickListener { viewModel.setGridVoteCount(2) }
+             binding.chipVote3.setOnClickListener { viewModel.setGridVoteCount(3) }
+             binding.chipVote4.setOnClickListener { viewModel.setGridVoteCount(4) }
+ 
+-            // Gender chips
+-            binding.chipMale.setOnClickListener { viewModel.setUserGender("MALE") }
+-            binding.chipFemale.setOnClickListener { viewModel.setUserGender("FEMALE") }
+-            binding.chipNone.setOnClickListener { viewModel.setUserGender("NONE") }
+-
+             // Temp block duration chips
+             binding.chip15min.setOnClickListener { viewModel.setTempBlockDurationMins(15) }
+             binding.chip30min.setOnClickListener { viewModel.setTempBlockDurationMins(30) }
+@@ -165,23 +138,9 @@ class SettingsActivity : AppCompatActivity() {
+                 pendingModelName = AiDetector.MODEL_LEGACY
+                 pickModel.launch(arrayOf("*/*"))
+             }
+-            binding.btnImportNsfw.setOnClickListener {
+-                pendingModelName = AiDetector.MODEL_NSFW
+-                pickModel.launch(arrayOf("*/*"))
+-            }
+-            binding.btnImportGender.setOnClickListener {
+-                pendingModelName = AiDetector.MODEL_GENDER
+-                pickModel.launch(arrayOf("*/*"))
+-            }
+             binding.btnRemoveLegacy.setOnClickListener {
+                 viewModel.deleteModel(AiDetector.MODEL_LEGACY)
+             }
+-            binding.btnRemoveNsfw.setOnClickListener {
+-                viewModel.deleteModel(AiDetector.MODEL_NSFW)
+-            }
+-            binding.btnRemoveGender.setOnClickListener {
+-                viewModel.deleteModel(AiDetector.MODEL_GENDER)
+-            }
+             binding.btnChangePin.setOnClickListener {
+                 startActivity(Intent(this, PinSetupActivity::class.java))
+             }
+@@ -235,13 +194,9 @@ class SettingsActivity : AppCompatActivity() {
+         binding.sliderDelay.value = s.delaySeconds.coerceIn(5, 120).toFloat()
+         binding.txtDelayValue.text = "${s.delaySeconds}s"
+ 
+-        // ✅ AI Thresholds
++        // AI Threshold
+         binding.sliderGuardianThreshold.value = s.aiThreshold.coerceIn(0.3f, 0.95f)
+-        binding.sliderNsfwThreshold.value = s.nsfwGateThreshold.coerceIn(0.3f, 0.95f)
+-        binding.sliderGenderThreshold.value = s.genderThreshold.coerceIn(0.5f, 0.95f)
+         binding.txtGuardianThresholdValue.text = "%.2f".format(s.aiThreshold)
+-        binding.txtNsfwThresholdValue.text = "%.2f".format(s.nsfwGateThreshold)
+-        binding.txtGenderThresholdValue.text = "%.2f".format(s.genderThreshold)
+ 
+         // ✅ Grid vote chips
+         when (s.gridVoteCount) {
+@@ -251,18 +206,6 @@ class SettingsActivity : AppCompatActivity() {
+             4 -> binding.chipVote4.isChecked = true
+         }
+ 
+-        // Gender
+-        when (s.userGender) {
+-            "MALE" -> binding.chipMale.isChecked = true
+-            "FEMALE" -> binding.chipFemale.isChecked = true
+-            else -> binding.chipNone.isChecked = true
+-        }
+-        binding.txtGenderStatus.text = when (s.userGender) {
+-            "MALE" -> getString(R.string.gender_status_male)
+-            "FEMALE" -> getString(R.string.gender_status_female)
+-            else -> getString(R.string.gender_status_none)
+-        }
+-
+         // Temp block duration
+         when (s.tempBlockDurationMins) {
+             15 -> binding.chip15min.isChecked = true
+@@ -270,10 +213,8 @@ class SettingsActivity : AppCompatActivity() {
+             60 -> binding.chip60min.isChecked = true
+         }
+ 
+-        // Models
++        // Model
+         binding.txtLegacyStatus.text = formatStatus(s.legacyModel)
+-        binding.txtNsfwStatus.text = formatStatus(s.nsfwModel)
+-        binding.txtGenderModelStatus.text = formatStatus(s.genderModel)
+     }
+ 
+     private fun formatStatus(slot: com.guardian.shield.viewmodel.ModelSlotUi): String =
+diff --git a/app/src/main/java/com/guardian/shield/viewmodel/SettingsViewModel.kt b/app/src/main/java/com/guardian/shield/viewmodel/SettingsViewModel.kt
+index 4d98dc0..3953702 100644
+--- a/app/src/main/java/com/guardian/shield/viewmodel/SettingsViewModel.kt
++++ b/app/src/main/java/com/guardian/shield/viewmodel/SettingsViewModel.kt
+@@ -28,18 +28,11 @@ data class SettingsUiState(
+     val keywordFilter: Boolean = true,
+     val aiDetection: Boolean = false,
+     val delaySeconds: Int = 30,
+-    val userGender: String = "NONE",
+     val tempBlockDurationMins: Int = 15,
+-    // ✅ সব threshold
+     val aiThreshold: Float = 0.65f,
+-    val nsfwGateThreshold: Float = 0.60f,
+-    val genderThreshold: Float = 0.70f,
+     val gridVoteCount: Int = 2,
+     val modelLoaded: Boolean = false,
+-    val genderModelAvailable: Boolean = false,
+-    val legacyModel: ModelSlotUi = ModelSlotUi(),
+-    val nsfwModel: ModelSlotUi = ModelSlotUi(),
+-    val genderModel: ModelSlotUi = ModelSlotUi()
++    val legacyModel: ModelSlotUi = ModelSlotUi()
+ )
+ 
+ sealed class SettingsEvent {
+@@ -63,11 +56,8 @@ class SettingsViewModel @Inject constructor(
+         prefs.keywordFilter,
+         prefs.aiDetection,
+         prefs.delaySeconds,
+-        prefs.userGender,
+         prefs.tempBlockDurationMins,
+         prefs.aiThreshold,
+-        prefs.nsfwGateThreshold,
+-        prefs.genderThreshold,
+         prefs.gridVoteCount,
+         refreshTick
+     ) { values ->
+@@ -75,17 +65,11 @@ class SettingsViewModel @Inject constructor(
+             keywordFilter = values[0] as Boolean,
+             aiDetection = values[1] as Boolean,
+             delaySeconds = values[2] as Int,
+-            userGender = values[3] as String,
+-            tempBlockDurationMins = values[4] as Int,
+-            aiThreshold = values[5] as Float,
+-            nsfwGateThreshold = values[6] as Float,
+-            genderThreshold = values[7] as Float,
+-            gridVoteCount = values[8] as Int,
++            tempBlockDurationMins = values[3] as Int,
++            aiThreshold = values[4] as Float,
++            gridVoteCount = values[5] as Int,
+             modelLoaded = importer.isModelImported(AiDetector.MODEL_LEGACY),
+-            genderModelAvailable = importer.isModelImported(AiDetector.MODEL_GENDER),
+-            legacyModel = slot(AiDetector.MODEL_LEGACY),
+-            nsfwModel = slot(AiDetector.MODEL_NSFW),
+-            genderModel = slot(AiDetector.MODEL_GENDER)
++            legacyModel = slot(AiDetector.MODEL_LEGACY)
+         )
+     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
+ 
+@@ -101,13 +85,10 @@ class SettingsViewModel @Inject constructor(
+     fun setKeywordFilter(v: Boolean) { viewModelScope.launch { prefs.setKeywordFilter(v); prefs.bumpRulesVersion() } }
+     fun setAiDetection(v: Boolean) { viewModelScope.launch { prefs.setAiDetection(v); prefs.bumpRulesVersion() } }
+     fun setDelaySeconds(v: Int) { viewModelScope.launch { prefs.setDelaySeconds(v) } }
+-    fun setUserGender(v: String) { viewModelScope.launch { prefs.setUserGender(v); prefs.bumpRulesVersion() } }
+     fun setTempBlockDurationMins(v: Int) { viewModelScope.launch { prefs.setTempBlockDurationMins(v) } }
+ 
+     // ✅ নতুন setters
+     fun setAiThreshold(v: Float) { viewModelScope.launch { prefs.setAiThreshold(v) } }
+-    fun setNsfwGateThreshold(v: Float) { viewModelScope.launch { prefs.setNsfwGateThreshold(v) } }
+-    fun setGenderThreshold(v: Float) { viewModelScope.launch { prefs.setGenderThreshold(v) } }
+     fun setGridVoteCount(v: Int) { viewModelScope.launch { prefs.setGridVoteCount(v) } }
+ 
+     fun importModel(uri: Uri, modelName: String) {
+diff --git a/app/src/main/res/layout/activity_settings.xml b/app/src/main/res/layout/activity_settings.xml
+index 4dcd3eb..d768180 100644
+--- a/app/src/main/res/layout/activity_settings.xml
++++ b/app/src/main/res/layout/activity_settings.xml
+@@ -131,68 +131,6 @@
+                 </LinearLayout>
+             </com.google.android.material.card.MaterialCardView>
+ 
+-            <!-- ═══ GENDER FILTER ═══ -->
+-            <TextView
+-                style="@style/TextAppearance.GuardianShield.SectionHeader"
+-                android:layout_width="wrap_content"
+-                android:layout_height="wrap_content"
+-                android:text="@string/section_gender"
+-                android:layout_marginTop="20dp"
+-                android:layout_marginBottom="8dp" />
+-
+-            <com.google.android.material.card.MaterialCardView
+-                android:layout_width="match_parent"
+-                android:layout_height="wrap_content"
+-                app:cardBackgroundColor="@color/surface"
+-                app:cardCornerRadius="16dp">
+-
+-                <LinearLayout
+-                    android:layout_width="match_parent"
+-                    android:layout_height="wrap_content"
+-                    android:orientation="vertical"
+-                    android:padding="16dp">
+-
+-                    <com.google.android.material.chip.ChipGroup
+-                        android:id="@+id/chipGroupGender"
+-                        android:layout_width="match_parent"
+-                        android:layout_height="wrap_content"
+-                        app:singleSelection="true"
+-                        app:selectionRequired="true">
+-
+-                        <com.google.android.material.chip.Chip
+-                            android:id="@+id/chipMale"
+-                            style="@style/Widget.Material3.Chip.Filter"
+-                            android:layout_width="wrap_content"
+-                            android:layout_height="wrap_content"
+-                            android:text="@string/chip_male" />
+-
+-                        <com.google.android.material.chip.Chip
+-                            android:id="@+id/chipFemale"
+-                            style="@style/Widget.Material3.Chip.Filter"
+-                            android:layout_width="wrap_content"
+-                            android:layout_height="wrap_content"
+-                            android:text="@string/chip_female" />
+-
+-                        <com.google.android.material.chip.Chip
+-                            android:id="@+id/chipNone"
+-                            style="@style/Widget.Material3.Chip.Filter"
+-                            android:layout_width="wrap_content"
+-                            android:layout_height="wrap_content"
+-                            android:text="@string/chip_none"
+-                            android:checked="true" />
+-                    </com.google.android.material.chip.ChipGroup>
+-
+-                    <TextView
+-                        android:id="@+id/txtGenderStatus"
+-                        android:layout_width="match_parent"
+-                        android:layout_height="wrap_content"
+-                        android:textColor="@color/on_surface_dim"
+-                        android:textSize="12sp"
+-                        android:layout_marginTop="8dp"
+-                        android:text="@string/gender_status_none" />
+-                </LinearLayout>
+-            </com.google.android.material.card.MaterialCardView>
+-
+             <!-- ═══ TEMP BLOCK DURATION ═══ -->
+             <TextView
+                 style="@style/TextAppearance.GuardianShield.SectionHeader"
+@@ -364,76 +302,6 @@
+                         android:value="0.65"
+                         android:layout_marginBottom="8dp" />
+ 
+-                    <!-- NSFW Gate -->
+-                    <LinearLayout
+-                        android:layout_width="match_parent"
+-                        android:layout_height="wrap_content"
+-                        android:orientation="horizontal"
+-                        android:gravity="center_vertical">
+-
+-                        <TextView
+-                            android:layout_width="0dp"
+-                            android:layout_weight="1"
+-                            android:layout_height="wrap_content"
+-                            android:text="NSFW Gate"
+-                            android:textColor="@color/on_surface"
+-                            android:textSize="14sp" />
+-
+-                        <TextView
+-                            android:id="@+id/txtNsfwThresholdValue"
+-                            android:layout_width="48dp"
+-                            android:layout_height="wrap_content"
+-                            android:text="0.60"
+-                            android:textColor="@color/primary"
+-                            android:textSize="13sp"
+-                            android:gravity="end" />
+-                    </LinearLayout>
+-
+-                    <com.google.android.material.slider.Slider
+-                        android:id="@+id/sliderNsfwThreshold"
+-                        android:layout_width="match_parent"
+-                        android:layout_height="wrap_content"
+-                        android:valueFrom="0.3"
+-                        android:valueTo="0.95"
+-                        android:stepSize="0.01"
+-                        android:value="0.60"
+-                        android:layout_marginBottom="8dp" />
+-
+-                    <!-- Gender Confidence -->
+-                    <LinearLayout
+-                        android:layout_width="match_parent"
+-                        android:layout_height="wrap_content"
+-                        android:orientation="horizontal"
+-                        android:gravity="center_vertical">
+-
+-                        <TextView
+-                            android:layout_width="0dp"
+-                            android:layout_weight="1"
+-                            android:layout_height="wrap_content"
+-                            android:text="Gender Confidence"
+-                            android:textColor="@color/on_surface"
+-                            android:textSize="14sp" />
+-
+-                        <TextView
+-                            android:id="@+id/txtGenderThresholdValue"
+-                            android:layout_width="48dp"
+-                            android:layout_height="wrap_content"
+-                            android:text="0.70"
+-                            android:textColor="@color/primary"
+-                            android:textSize="13sp"
+-                            android:gravity="end" />
+-                    </LinearLayout>
+-
+-                    <com.google.android.material.slider.Slider
+-                        android:id="@+id/sliderGenderThreshold"
+-                        android:layout_width="match_parent"
+-                        android:layout_height="wrap_content"
+-                        android:valueFrom="0.5"
+-                        android:valueTo="0.95"
+-                        android:stepSize="0.01"
+-                        android:value="0.70"
+-                        android:layout_marginBottom="12dp" />
+-
+                     <!-- Grid Vote Count -->
+                     <TextView
+                         android:layout_width="wrap_content"
+@@ -558,108 +426,6 @@
+                             app:cornerRadius="10dp" />
+                     </LinearLayout>
+ 
+-                    <View
+-                        android:layout_width="match_parent"
+-                        android:layout_height="1dp"
+-                        android:background="@color/surface"
+-                        android:layout_marginTop="12dp"
+-                        android:layout_marginBottom="12dp" />
+-
+-                    <!-- NSFW Model -->
+-                    <TextView
+-                        android:layout_width="wrap_content"
+-                        android:layout_height="wrap_content"
+-                        android:text="NSFW Gate Model (.tflite)"
+-                        android:textColor="@color/on_surface"
+-                        android:textSize="13sp"
+-                        android:textStyle="bold" />
+-
+-                    <TextView
+-                        android:id="@+id/txtNsfwStatus"
+-                        android:layout_width="match_parent"
+-                        android:layout_height="wrap_content"
+-                        android:text="@string/model_missing"
+-                        android:textColor="@color/on_surface_dim"
+-                        android:textSize="12sp"
+-                        android:layout_marginTop="2dp"
+-                        android:layout_marginBottom="8dp" />
+-
+-                    <LinearLayout
+-                        android:layout_width="match_parent"
+-                        android:layout_height="wrap_content"
+-                        android:orientation="horizontal">
+-
+-                        <com.google.android.material.button.MaterialButton
+-                            android:id="@+id/btnImportNsfw"
+-                            style="@style/Widget.Material3.Button.TonalButton"
+-                            android:layout_width="0dp"
+-                            android:layout_weight="1"
+-                            android:layout_height="wrap_content"
+-                            android:text="Import"
+-                            android:layout_marginEnd="8dp"
+-                            app:cornerRadius="10dp" />
+-
+-                        <com.google.android.material.button.MaterialButton
+-                            android:id="@+id/btnRemoveNsfw"
+-                            style="@style/Widget.Material3.Button.TonalButton"
+-                            android:layout_width="0dp"
+-                            android:layout_weight="1"
+-                            android:layout_height="wrap_content"
+-                            android:text="Remove"
+-                            app:cornerRadius="10dp" />
+-                    </LinearLayout>
+-
+-                    <View
+-                        android:layout_width="match_parent"
+-                        android:layout_height="1dp"
+-                        android:background="@color/surface"
+-                        android:layout_marginTop="12dp"
+-                        android:layout_marginBottom="12dp" />
+-
+-                    <!-- Gender Model -->
+-                    <TextView
+-                        android:layout_width="wrap_content"
+-                        android:layout_height="wrap_content"
+-                        android:text="Gender Model (.tflite)"
+-                        android:textColor="@color/on_surface"
+-                        android:textSize="13sp"
+-                        android:textStyle="bold" />
+-
+-                    <TextView
+-                        android:id="@+id/txtGenderModelStatus"
+-                        android:layout_width="match_parent"
+-                        android:layout_height="wrap_content"
+-                        android:text="@string/model_missing"
+-                        android:textColor="@color/on_surface_dim"
+-                        android:textSize="12sp"
+-                        android:layout_marginTop="2dp"
+-                        android:layout_marginBottom="8dp" />
+-
+-                    <LinearLayout
+-                        android:layout_width="match_parent"
+-                        android:layout_height="wrap_content"
+-                        android:orientation="horizontal">
+-
+-                        <com.google.android.material.button.MaterialButton
+-                            android:id="@+id/btnImportGender"
+-                            style="@style/Widget.Material3.Button.TonalButton"
+-                            android:layout_width="0dp"
+-                            android:layout_weight="1"
+-                            android:layout_height="wrap_content"
+-                            android:text="Import"
+-                            android:layout_marginEnd="8dp"
+-                            app:cornerRadius="10dp" />
+-
+-                        <com.google.android.material.button.MaterialButton
+-                            android:id="@+id/btnRemoveGender"
+-                            style="@style/Widget.Material3.Button.TonalButton"
+-                            android:layout_width="0dp"
+-                            android:layout_weight="1"
+-                            android:layout_height="wrap_content"
+-                            android:text="Remove"
+-                            app:cornerRadius="10dp" />
+-                    </LinearLayout>
+-
+                     <View
+                         android:layout_width="match_parent"
+                         android:layout_height="1dp"
