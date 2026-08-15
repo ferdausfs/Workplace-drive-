@@ -65,3 +65,60 @@ User-এর report: "ঠিকঠাক কাজ করে না"। **কো�
 - agents.md-এর non-negotiable invariants মেনে চলা (accessibility service safety ইত্যাদি)
 - journal update প্রতি ধাপে → drive push
 - কোডের জন্য GitHub repo = canonical; এই journal + reports drive-তে
+
+---
+
+## 6. Repo #2 — Dogs-of-KAHAF (Guardian Shield) — CLONED + analyzed
+
+- **URL:** https://github.com/ferdausfs/Dogs-of-KAHAF · **Branch:** `main` · **HEAD:** `be33b71`
+- **What:** "Guardian Shield" — NSFW content blocker (package `com.guardian.shield`, minSdk 26, target 35, v2.3.1)।
+- **Stack:** Kotlin, MVVM+Clean, Hilt, Room v2, DataStore, Coroutines/Flow, Material 3 dark,
+  AccessibilityService + **TFLite on-device AI** (3 models: guardian_model / nsfw_model / gender_model, GPU+CPU fallback)।
+- **61 Kotlin files** (curbox-এর 246-এর তুলনায় ছোট)। Core: `AiDetector.kt` (563 lines), `GuardianAccessibilityService.kt` (31KB), `RulesEngine.kt`।
+- **Features:** AI NSFW detect · opposite-gender filter · keyword+regex · per-app block/whitelist · schedule ·
+  PIN (SHA-256) · 3-strike→24h lock · anti-uninstall · activity log · onboarding · Islamic reel reminder overlay।
+
+## 7. 🎯 FALSE-BLOCK ROOT-CAUSE ANALYSIS (code-verified — মূল কাজ)
+
+User report: "onek besi false block kore"। Code-এ ৬টা স্পষ্ট উৎস পাওয়া গেছে:
+
+| # | Cause | File | Evidence | Severity |
+|---|---|---|---|---|
+| A | **Hybrid soft-NSFW path** — NSFW score ≥0.58 হলে gender threshold 0.78→0.62; gender model পুরো ছবিতে চলে (avatar/thumbnail/product photo সহ) → fully-clothed মহিলার ছবি + weak 0.58 = block | AiDetector.kt `isOppositeGenderNsfw` | `isSoftNsfw` + `softGenderConf = (genderConf*0.80).coerceAtLeast(0.62)` | 🔴 HIGHEST |
+| B | Legacy 3-class model-এ score **sum** করছে: `(scores[1]+scores[2]).coerceAtMost(1.0)` — দুটো unsafe class যোগ হয়ে inflate → false positive | AiDetector.kt `extractGuardianScore` | `3 -> (scores[1]+scores[2])` | 🔴 HIGH |
+| C | **Regex keyword-এ word-boundary নেই** — `Regex(kw, IGNORE_CASE).containsMatchIn(text)` — `sex` ম্যাচ করে "Essex"/"sextant" | RulesEngine.kt `evaluateText` | regex branch-এ `\b` missing | 🟠 MED |
+| D | Min text length 10→3 ("sensitivity") — ৩-char random string-এ keyword hit বেড়েছে | RulesEngine.kt | `text.length < 2` check only | 🟠 MED |
+| E | Region scan খুব broad — যেকোনো `ImageView/avatar/photo/video` view >80px ধরে, benign ছবিও scan হয় | GuardianAccessibilityService `collectImageRegions` | className contains("Image"/"avatar"/"photo") | 🟡 LOW |
+| F | Default thresholds একাধিক জায়গায় ভিন্ন: Constants gender=0.82 vs prefs default 0.78 vs AiDetector cached 0.70 vs soft 0.62 — confusion source | Constants.kt / GuardianPreferences / AiDetector | 4 ভিন্ন মান | 🟡 LOW |
+
+### প্রস্তাবিত fix (এক-একটা আলাদা PR)
+1. **A**: soft-NSFW path-এ gender match + skin/body-region evidence + higher nsfw floor দাবি করা
+   (soft trigger তখনই যখন nsfw ≥ 0.58 **এবং** gender conf ≥ 0.85, বা gender model-এ crop)।
+2. **B**: `3 -> max(scores[1], scores[2])` (sum নয়)।
+3. **C**: regex keyword-এও word-boundary (বা auto-wrap: `(?iu)\b(?:kw)\b`)।
+4. **D**: min length 3→5 (অথবা config-এ ফেরত)।
+5. **E/F**: region filter stricter + single source-of-truth threshold।
+
+## 8. INTEGRATION PLAN (curbox UI + এই blocker) — ⏳ architecture decision দরকার
+- **Curbox agents.md নিয়ম:** "Ask before architectural change" — তাই ৩টা option:
+  - **(ক) curbox fork + feature module**: curbox-এ "Guardian" reducer যোগ (curbox-এর নিজস্ব UI/theme-এই NSFW blocker চলে)।
+  - **(খ) Dogs-of-KAHAF-এ curbox-সদৃশ UI rebuild** (app নিজে থেকে যায়, শুধু curbox-এর look)।
+  - **(গ) দুটো আলাদা রেখে শুধু false-block fix** (কোন merge নয়)।
+- User-এর আগের কথায় "curbox e sudu ei nsfw block add korbo" → **Option (ক)**-ই মনে হচ্ছে (curbox = shell, NSFW = feature)।
+- Honest: এটা বড় কাজ (accessibility service + TFLite + Shizuku + UI integration)। ধাপে ধাপে করা হবে।
+
+## 9. Sandbox limitation (আবার)
+- **Android SDK নেই → compile সম্ভব নয়।** Kotlin code + pure-logic review/test পারি; build/device-test user-এর machine।
+
+---
+
+## 10. PHASE 1 STARTED — false-block fix (Dogs-of-KAHAF)
+
+**Branch:** `fix/false-block-reduction` (base main `be33b71`). 3 files, 32+/26-.
+- Fix 1: hybrid soft-gender lowering (0.62) removed → full genderConf (0.78) required.
+- Fix 2: full-screen gender scan → `requireStrongNsfw=true` (NSFW gate 0.80), regions keep 0.68.
+- Fix 3: regex keyword word-boundaries (unless user-anchored) — "sex" won't match "Essex".
+- Deliberately NOT changed: 3-class score sum (model semantics unverifiable without .tflite) — flagged.
+- Regex semantics verified with equivalent harness. **No Android build in sandbox — user must run ./gradlew assembleDebug.**
+- PR body + patch: drive `pr/falseblock_fix.patch` + `pr/PR_BODY_falseblock_fix.md`.
+- Next: user PR → merge → device test. Then Phase 2 (curbox integration) plan.
