@@ -1,0 +1,368 @@
+diff --git a/scripts/d2_tests.mjs b/scripts/d2_tests.mjs
+index 07e1ad2..ee3c890 100644
+--- a/scripts/d2_tests.mjs
++++ b/scripts/d2_tests.mjs
+@@ -217,13 +217,26 @@ console.log('\n── [#9-10] Engine — TRENDING block audit + zero leak ──
+   ok('[#9h] NO leak of would-be direction in public JSON',
+     !json.includes('wouldBeDirection') && !json.includes('D2_TRENDING_BLOCKED'));
+ 
+-  // non-D2 fixtures: no audit, no D2 filter
++  // Flat (RANGING) fixtures: only the NEW 2026-08-15 D2 branch may fire here.
++  // RANGING + structure-ALIGNED is now a hard block (41.2% WR n=1639, the
++  // single biggest losing cell). These fixtures are RANGING by construction,
++  // so an ALIGNED one correctly hits D2_RANGING_ALIGNED_BLOCK instead of
++  // passing clean; no OTHER D2 branch (TRENDING/BAD_PAIR/HIGHEST) may fire.
+   for (const [name, prof] of [['flat', RANGING],
+                                ['flat_v2', { basePrice: 1.08, vol: 0.0012, trend: 0, seed: 55 }]]) {
+     const s = await buildMultiTimeframeSignal('BTC/USD', makeCandleData(prof), 'CRYPTO', ENV, { session: FIXED_SESSION, newsBlock: null, edgeFeatures: false });
+-    ok('[#10] ' + name + ': no D2 audit + no D2_ filter',
+-      getD2Audit(s) === null && !s.filtersApplied.some(f => f.startsWith('D2_')),
++    const d2 = s.filtersApplied.filter(f => f.startsWith('D2_'));
++    ok('[#10] ' + name + ': only allowed D2 branch is RANGING_ALIGNED',
++      d2.every(f => f.includes('D2_RANGING_ALIGNED_BLOCK')),
+       'filters=' + JSON.stringify(s.filtersApplied));
++    if (d2.length === 0) {
++      ok('[#10] ' + name + ': no D2 audit', getD2Audit(s) === null);
++    } else {
++      const audit = getD2Audit(s);
++      ok('[#10] ' + name + ': D2 audit matches RANGING_ALIGNED block',
++        !!audit && audit.attribution === 'D2_RANGING_ALIGNED_BLOCKED',
++        JSON.stringify(audit && audit.attribution));
++    }
+   }
+ }
+ 
+diff --git a/scripts/fix_tests.mjs b/scripts/fix_tests.mjs
+index 157f757..9d69f46 100644
+--- a/scripts/fix_tests.mjs
++++ b/scripts/fix_tests.mjs
+@@ -58,6 +58,7 @@ import { buildMultiTimeframeSignal } from '../src/signal/engine.js';
+ import { buildMultiTimeframeSignalOTC } from '../src/signal/otcEngine.js';
+ import { analyzeOTCPatterns } from '../src/analysis/otc.js';
+ import { getSignalGrade } from '../src/analysis/grade.js';
++import { getCalibratedGradeAndConfidence, getCalibratedScore } from '../src/analysis/calibration.js';
+ import { analyzeStructure } from '../src/indicators/structure.js';
+ import { runDeterministicVoteAndFilters, decideTfDirection } from '../src/signal/voteFilters.js';
+ import { getSessionWeightMultiplier } from '../src/analysis/filters.js';
+@@ -1817,13 +1818,13 @@ console.log('\n── T43: push lock released on Telegram fail + health status 
+   ok('T43h: scheduled */5 awaits scheduledScan (does not wrap-and-return)',
+     idx.includes('await scheduledScan(env, ctx)') && !idx.includes('ctx.waitUntil(scheduledScan'));
+ 
+-  // Reviewer R1/R2: /health must carry version 6.10.2 and a push object whose
++  // Reviewer R1/R2: /health must carry version 6.10.3 and a push object whose
+   // delivered24h field is the durable counter (not the deletable pushLog keys).
+   const hh = fs.readFileSync(fileURLToPath(new URL('../src/handlers/health.js', import.meta.url)), 'utf8');
+   ok('T43i: /health push block exposes durable delivered24h at top level',
+     hh.includes('delivered24h') && hh.includes('phase10.pushesLast24h'));
+-  ok('T43j: /health version bumped to 6.10.2',
+-    hh.includes("version: '6.10.2'"));
++  ok('T43j: /health version bumped to 6.10.3',
++    hh.includes("version: '6.10.3'"));
+ }
+ 
+ console.log('\n── T44: PENDING_ENTRY unfilled -> TIE, not mechanical WIN (Phase F 2026-08-14) ──');
+@@ -1888,6 +1889,48 @@ console.log('\n── T44: PENDING_ENTRY unfilled -> TIE, not mechanical WIN (Ph
+   }
+ }
+ 
++console.log('\n── T45: regime-conditional calibration + RANGING/ALIGNED block (Phase F 2026-08-15) ──');
++{
++  // Regime-conditional structWR: RANGING mean-reversion vs TRENDING trend-following.
++  const conf88 = 88; // bucket '88+' → confBucketWR 0.4469…
++
++  const rangingAligned = getCalibratedGradeAndConfidence(conf88, 'ALIGNED', 'RANGING');
++  eq('T45a: RANGING + ALIGNED capped to C (worst cell 41.2%)', rangingAligned.grade.grade, 'C');
++
++  const trendingAligned = getCalibratedGradeAndConfidence(conf88, 'ALIGNED', 'TRENDING');
++  ok('T45b: TRENDING + ALIGNED NOT capped (best cell 51.4%)',
++    ['A+', 'A'].includes(trendingAligned.grade.grade), JSON.stringify(trendingAligned.grade.grade));
++
++  const rangingAgainst = getCalibratedGradeAndConfidence(conf88, 'AGAINST', 'RANGING');
++  eq('T45c: RANGING + AGAINST not capped (best 50.1%)', rangingAgainst.grade.grade, 'A+');
++
++  const sAligned = getCalibratedScore(conf88, 'ALIGNED', 'RANGING');
++  const sAgainst = getCalibratedScore(conf88, 'AGAINST', 'RANGING');
++  ok('T45d: RANGING AGAINST scores above ALIGNED (ranking corrected)',
++    sAgainst > sAligned, `against=${sAgainst} aligned=${sAligned}`);
++
++  const sTrendAligned = getCalibratedScore(conf88, 'ALIGNED', 'TRENDING');
++  ok('T45e: TRENDING ALIGNED scores above RANGING ALIGNED (regime-aware)',
++    sTrendAligned > sAligned, `trending=${sTrendAligned} ranging=${sAligned}`);
++
++  // No-regime callers (OTC / legacy) still work via pooled table.
++  const noRegime = getCalibratedGradeAndConfidence(conf88, 'ALIGNED');
++  eq('T45f: no-regime call falls back to pooled cap (ALIGNED→C)', noRegime.grade.grade, 'C');
++
++  // getSignalGrade passes regime through.
++  const gs = getSignalGrade(conf88, 0, '', 'ALIGNED', 'RANGING');
++  eq('T45g: getSignalGrade is regime-aware (RANGING ALIGNED→C)', gs.grade, 'C');
++
++  // Engine wiring: the new hard block + regime-aware calibration call exist.
++  const eng = fs.readFileSync(fileURLToPath(new URL('../src/signal/engine.js', import.meta.url)), 'utf8');
++  ok('T45h: engine has D2_RANGING_ALIGNED_BLOCK hard block',
++    eng.includes('D2_RANGING_ALIGNED_BLOCK (41.2% WR n=1639)') && eng.includes('buildStructureVerdict(tfResults, finalDirection).overall === \'ALIGNED\''));
++  ok('T45i: engine passes marketRegime into calibrated grade/confidence',
++    eng.includes('getCalibratedGradeAndConfidence(confidence, structureVerdict.overall, marketRegime, activeCalib)'));
++  const cfg = fs.readFileSync(fileURLToPath(new URL('../src/config.js', import.meta.url)), 'utf8');
++  ok('T45j: D2_RANGING_ALIGNED_BLOCK_ENABLED flag present', cfg.includes('D2_RANGING_ALIGNED_BLOCK_ENABLED: true'));
++}
++
+ console.log('\n───────────────────────────────────────────────────────────');
+ console.log(fail === 0 ? 'PASS: ' + pass + '   FAIL: 0' : 'PASS: ' + pass + '   FAIL: ' + fail);
+ console.log(fail === 0 ? 'ALL FIX TESTS PASSED' : 'FAILURES: ' + failures.join(', '));
+diff --git a/scripts/redeploy.sh b/scripts/redeploy.sh
+index 2c74ef0..b61cfde 100755
+--- a/scripts/redeploy.sh
++++ b/scripts/redeploy.sh
+@@ -43,7 +43,7 @@
+ # Env overrides:
+ #   SCRIPT_NAME     default fttotcv6
+ #   META            default $HOME/wmeta.json
+-#   EXPECTED_BYTES  if set, bundle size must match exactly (v6.10.2 bundle
++#   EXPECTED_BYTES  if set, bundle size must match exactly (v6.10.3 bundle
+ #                   rebuild after merge; set to its exact byte size)
+ #   CRONS           comma list, default "*/2 * * * *,*/5 * * * *,0 0 * * 1"
+ #   HEALTH_URL      default https://fttotcv6.umuhammadiswa.workers.dev/health
+@@ -160,15 +160,15 @@ print("  push.noTokenReason =", p.get("noTokenReason"))
+ print("  push.subscribers   =", len(p.get("subscribers") or []), "subscriber(s)")
+ print("  push.lastAttempt   =", json.dumps(p.get("lastAttempt"))[:300])
+ print("  push.delivered24h  =", p.get("delivered24h"))
+-if str(d.get("version")) != "6.10.2":
+-    print("  ✗ version is not 6.10.2 — deploy did not take effect (or this is the old script).")
++if str(d.get("version")) != "6.10.3":
++    print("  ✗ version is not 6.10.3 — deploy did not take effect (or this is the old script).")
+     sys.exit(2)
+ if p.get("enabled") and p.get("tokenValid") is False:
+     print("  ✗ BOT_TOKEN on fttotcv6 is NOT a valid live bot token.")
+     print("    Fix: wrangler secret put BOT_TOKEN --name fttotcv6")
+     print("    (use the SAME value the ftt-telegram-bot worker uses; then re-check /health)")
+     sys.exit(3)
+-print("  ✓ live worker is 6.10.2 with push diagnostics visible (R1)")
++print("  ✓ live worker is 6.10.3 with push diagnostics visible (R1)")
+ PY
+   local rc=$?
+   rm -f "$hbody"
+diff --git a/src/analysis/calibration.js b/src/analysis/calibration.js
+index 44e5d10..926fb82 100644
+--- a/src/analysis/calibration.js
++++ b/src/analysis/calibration.js
+@@ -55,6 +55,28 @@ export const CALIB = {
+     UNKNOWN: 0.4175257731958763,
+   },
+ 
++  // REGIME-CONDITIONAL structure WR (2026-08-15, Phase F forward 08-01..15).
++  // The pooled structWR above bakes in a RANGING bias (RANGING is ~75% of the
++  // window and in RANGING the structure verdict is INVERTED: ALIGNED 41.2% is
++  // the worst cell, AGAINST 50.1% the best — mean-reversion). In TRENDING the
++  // verdict flips back (ALIGNED 51.4% best). A single pooled table therefore
++  // mis-ranks trending signals. Cells with n < 50 are omitted → getStructWR
++  // falls back to the pooled table for them (no invented numbers).
++  // Source: reports/SCORING_INVERSION_AUDIT_2026-08-15.md.
++  structWRByRegime: {
++    RANGING: {
++      ALIGNED: 0.412,    // n=1639  CI 38.9-43.6
++      AGAINST: 0.501,    // n=752   CI 46.6-53.7
++      MIXED: 0.443,      // n=1247  CI 41.5-47.0
++      NEUTRAL: 0.422,    // n=135   CI 34.2-50.7
++    },
++    TRENDING: {
++      ALIGNED: 0.514,    // n=245   CI 45.2-57.6
++      MIXED: 0.420,      // n=100   CI 32.8-51.8
++      // AGAINST/NEUTRAL n<50 → fall back to pooled (no invented cells)
++    },
++  },
++
+   // raw confidence bucket WR TRAIN
+   confBucketWR: {
+     '72-75': 0.4164904862579281,
+@@ -116,7 +138,13 @@ function getConfBucket(confidence) {
+   return '88+';
+ }
+ 
+-function getStructWR(overall, tables) {
++function getStructWR(overall, regime, tables) {
++  // Regime-conditional table first (n>=50 cells only), then any dynamic tables,
++  // then the pooled static table. Regime is optional (OTC / older callers).
++  if (regime && CALIB.structWRByRegime[regime]) {
++    const v = CALIB.structWRByRegime[regime][overall];
++    if (typeof v === 'number') return v;
++  }
+   if (!overall) return (tables && tables.base) || CALIB.base;
+   const v = (tables && tables.structWR && tables.structWR[overall]);
+   if (typeof v === 'number') return v;
+@@ -140,9 +168,9 @@ function getConfBucketWR(bucket, tables) {
+  * CALIB values (TRAIN 08-01..06) are used — the refresh is a data change,
+  * never a second calibration layer (R3).
+  */
+-export function getCalibratedScore(confidence, structureOverall, tables = null) {
++export function getCalibratedScore(confidence, structureOverall, regime = null, tables = null) {
+   const bucket = getConfBucket(confidence);
+-  const sWR = getStructWR(structureOverall, tables);
++  const sWR = getStructWR(structureOverall, regime, tables);
+   const cWR = getConfBucketWR(bucket, tables);
+   // simple average — stable, interpretable, evidence-backed
+   // (could weight, but equal weight worked for TRAIN/VAL monotonic)
+@@ -177,16 +205,18 @@ const GRADE_DEFS = {
+   'F':  { grade: 'F',  label: 'AVOID',     description:'Very weak. Do NOT trade.' },
+ };
+ 
+-export function getCalibratedGradeAndConfidence(confidence, structureOverall, tables = null) {
+-  const score = getCalibratedScore(confidence, structureOverall, tables);
++export function getCalibratedGradeAndConfidence(confidence, structureOverall, regime = null, tables = null) {
++  const score = getCalibratedScore(confidence, structureOverall, regime, tables);
+   const calConf = scoreToCalibratedConfidence(score);
+   const gradeLetter = scoreToGrade(score);
+   const grade = { ...GRADE_DEFS[gradeLetter] };
+ 
+-  // ── STRUCTURE OVERRIDE (evidence-based inversion) ──
+-  // Previously capped AGAINST to C (but AGAINST has best WR 46.6% TRAIN).
+-  // Now cap ALIGNED (worst 39.3%) to C, MIXED to B, AGAINST/NEUTRAL no cap.
+-  // This keeps a cap mechanism (FIX-A stays) but corrects inversion.
++  // ── STRUCTURE OVERRIDE (evidence-based inversion, now REGIME-AWARE) ──
++  // RANGING (mean-reversion): ALIGNED is the WORST cell (41.2%) → cap C;
++  // MIXED 44.3% → cap B; AGAINST is the BEST (50.1%) → no cap.
++  // TRENDING (trend-following): ALIGNED is the BEST (51.4%) → NO cap
++  // (the old pooled cap wrongly crushed good trending signals); MIXED 42.0%
++  // → cap B. Other regimes keep the pooled behaviour (ALIGNED→C, MIXED→B).
+   const order = ['F','D','C','B','A','A+'];
+   const cap = (g, maxGrade) => {
+     const gi = order.indexOf(g.grade);
+@@ -199,12 +229,18 @@ export function getCalibratedGradeAndConfidence(confidence, structureOverall, ta
+   };
+ 
+   let finalGrade = grade;
+-  if (structureOverall === 'ALIGNED') {
+-    finalGrade = cap(finalGrade, 'C'); // ALIGNED worst 39.3% → max C
+-  } else if (structureOverall === 'MIXED') {
+-    finalGrade = cap(finalGrade, 'B'); // MIXED middle 42.1% → max B
++  if (regime === 'TRENDING') {
++    // Trend-following: ALIGNED confirms the trend and wins (51.4%) — do not cap.
++    if (structureOverall === 'MIXED') finalGrade = cap(finalGrade, 'B');
++  } else {
++    // RANGING (and any other / unknown regime): mean-reversion behaviour.
++    if (structureOverall === 'ALIGNED') {
++      finalGrade = cap(finalGrade, 'C'); // ALIGNED worst in RANGING 41.2% → max C
++    } else if (structureOverall === 'MIXED') {
++      finalGrade = cap(finalGrade, 'B'); // MIXED middle 44.3% → max B
++    }
++    // AGAINST and NEUTRAL best in RANGING → no cap, allow A+
+   }
+-  // AGAINST and NEUTRAL best → no cap, allow A+
+ 
+   return {
+     score,
+diff --git a/src/analysis/grade.js b/src/analysis/grade.js
+index e152af3..5695a1d 100644
+--- a/src/analysis/grade.js
++++ b/src/analysis/grade.js
+@@ -10,15 +10,15 @@ const GRADE_DEFS = CALIB_GRADE_DEFS;
+  * avgConf and alignment are kept in signature for compat but not used for scoring
+  * (they were found to be non-predictive / inverted vs WR). StructureOverall is used.
+  */
+-export function getSignalGrade(confidence, avgConf, alignment, structureOverall) {
+-  // Use calibrated scoring
+-  const cal = getCalibratedGradeAndConfidence(confidence, structureOverall);
++export function getSignalGrade(confidence, avgConf, alignment, structureOverall, regime) {
++  // Use calibrated scoring (regime-conditional when the caller provides regime)
++  const cal = getCalibratedGradeAndConfidence(confidence, structureOverall, regime);
+   return cal.grade;
+ }
+ 
+ // Expose helper for engine to get both calibrated confidence and grade in one call
+-export function getCalibratedGradeAndConfidenceWrapper(confidence, structureOverall) {
+-  return getCalibratedGradeAndConfidence(confidence, structureOverall);
++export function getCalibratedGradeAndConfidenceWrapper(confidence, structureOverall, regime) {
++  return getCalibratedGradeAndConfidence(confidence, structureOverall, regime);
+ }
+ 
+ export function resolveTieWithTolerance(details) {
+diff --git a/src/config.js b/src/config.js
+index a6f2dcd..ed05f35 100644
+--- a/src/config.js
++++ b/src/config.js
+@@ -144,6 +144,15 @@ export const CONFIG = {
+   // behind this flag for a one-line re-enable after the window.
+   D2_BAD_PAIR_BLOCK_ENABLED: false,
+ 
++  // Phase F (2026-08-15): RANGING + ALIGNED structure is the single biggest
++  // losing cell in the forward window (41.2% WR, n=1639, CI 38.9–43.6 — the CI
++  // upper bound is decisively below breakeven 55.6%). Blocking it (same D2 hard
++  // block mechanism as TRENDING) removes ~39% of signals but lifts pooled WR
++  // ~44.3% → ~46.3% (post-calibration era ~48.5% → ~50.4%). Data-backed;
++  // evidence: reports/SCORING_INVERSION_AUDIT_2026-08-15.md. Flagged for a
++  // one-line rollback (set false) without a redeploy of the branch logic.
++  D2_RANGING_ALIGNED_BLOCK_ENABLED: true,
++
+   // Phase F (2026-08-04): Forex SELL probe instrumentation. Tracks every
+   // forex SELL with its signal-time context (regime/session/HTF/RSI) in a
+   // private KV namespace so the forward window can decide whether forex SELL
+diff --git a/src/handlers/health.js b/src/handlers/health.js
+index d47c466..15f221d 100644
+--- a/src/handlers/health.js
++++ b/src/handlers/health.js
+@@ -27,7 +27,7 @@ export async function handleHealth(env) {
+   const phase10        = await getPushStats(env, { validateToken: true });        // Phase 10 push
+ 
+   return jsonResponse({
+-    status: 'healthy', version: '6.10.2', timestamp: new Date().toISOString(),
++    status: 'healthy', version: '6.10.3', timestamp: new Date().toISOString(),
+     apiKeys: { configured: keyCount, source: keySource, status: keyCount > 0 ? 'ready' : 'NO KEYS' },
+     apiKeysLoaded: keyCount,
+     quotaUsedToday,
+diff --git a/src/index.js b/src/index.js
+index 475c63a..8968fcd 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -1,5 +1,5 @@
+ /**
+- * FTT Signal Worker v6.10.2
++ * FTT Signal Worker v6.10.3
+  * Cloudflare Worker Entry Point
+  */
+ 
+@@ -124,7 +124,7 @@ export default {
+       } else {
+         response = jsonResponse({
+           status: 'ok',
+-          message: 'FTT Signal Worker v6.10.2 — Forex + Crypto + OTC + History Tracking',
++          message: 'FTT Signal Worker v6.10.3 — Forex + Crypto + OTC + History Tracking',
+           endpoints: {
+             health:    '/',
+             signal:    '/api/signal?pair=EUR/USD',
+diff --git a/src/signal/engine.js b/src/signal/engine.js
+index 61120a6..1a23797 100644
+--- a/src/signal/engine.js
++++ b/src/signal/engine.js
+@@ -182,6 +182,14 @@ export async function buildMultiTimeframeSignal(pair, candleData, assetType, env
+       finalDirection = 'NO_TRADE'; confidence = 0;
+       filtersApplied.push('D2_TRENDING_BLOCK (29.5% WR n=356)');
+       d2Audit = { attribution: 'D2_TRENDING_BLOCKED' };
++    } else if (CONFIG.D2_RANGING_ALIGNED_BLOCK_ENABLED && marketRegime === 'RANGING' &&
++               buildStructureVerdict(tfResults, finalDirection).overall === 'ALIGNED') {
++      // Phase F 2026-08-15: RANGING + ALIGNED is the single biggest losing cell
++      // (41.2% WR n=1639, CI 38.9-43.6) — structure confirmation is inverted in
++      // ranging (mean-reversion), so an "aligned" setup is the worst in that regime.
++      finalDirection = 'NO_TRADE'; confidence = 0;
++      filtersApplied.push('D2_RANGING_ALIGNED_BLOCK (41.2% WR n=1639)');
++      d2Audit = { attribution: 'D2_RANGING_ALIGNED_BLOCKED' };
+     } else if (CONFIG.D2_BAD_PAIR_BLOCK_ENABLED && ['USD/JPY', 'AUD/USD', 'DOT/USD'].includes(pair)) {
+       finalDirection = 'NO_TRADE'; confidence = 0;
+       filtersApplied.push('D2_BAD_PAIR_BLOCK (' + pair + ' <20% WR)');
+@@ -375,7 +383,7 @@ export async function buildMultiTimeframeSignal(pair, candleData, assetType, env
+   let calibratedConfForReport = confidence;
+   let calibratedScoreForTrace = null;
+   if (finalDirection !== 'NO_TRADE') {
+-    const cal = getCalibratedGradeAndConfidence(confidence, structureVerdict.overall, activeCalib);
++    const cal = getCalibratedGradeAndConfidence(confidence, structureVerdict.overall, marketRegime, activeCalib);
+     calibratedConfForReport = cal.calibratedConfidence;
+     calibratedScoreForTrace = cal.score;
+   }
+@@ -389,7 +397,7 @@ export async function buildMultiTimeframeSignal(pair, candleData, assetType, env
+   } else {
+     // getSignalGrade now itself uses calibrated scoring, but we also have calibrated
+     // confidence from above. Use the calibrated grade directly to ensure consistency.
+-    const cal = getCalibratedGradeAndConfidence(confidence, structureVerdict.overall, activeCalib);
++    const cal = getCalibratedGradeAndConfidence(confidence, structureVerdict.overall, marketRegime, activeCalib);
+     finalGrade = cal.grade;
+     calibratedConfForReport = cal.calibratedConfidence;
+     calibratedScoreForTrace = cal.score;

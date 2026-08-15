@@ -238,3 +238,20 @@
 - **🟡 Retention caveat:** `/api/history` per-pair cap 500 — ADA/USD, AVAX/USD cap-এ; 08-01 ছাঁটাই হচ্ছে (333→325)।
   Conclusion বদলায় না, কিন্তু daily tar.gz archive (drive data/) হচ্ছে একমাত্র স্থায়ী record।
 - Report: `reports/PHASE_F_2026-08-15.md` · Analysis script: `scripts/daily_checkup.py`।
+
+---
+
+## 22. ADDENDUM — ACCURACY PR (v6.10.3) ready (2026-08-15)
+
+- **User decision:** accuracy বাড়াতে যা করা লাগে — তাই data-backed engine change implement + PR-ready।
+- **Root cause (audit, data-proven):** RANGING+ALIGNED = 41.2% WR (n=1639, CI 38.9-43.6) — সবচেয়ে বড় লস-পুল;
+  TRENDING+ALIGNED = 51.4% (best) — কিন্তু pooled calibration-এর ALIGNED→C cap regime-blind হয়ে trending-ও crush করছিল।
+- **Changes (v6.10.3):** (1) নতুন D2 hard block `D2_RANGING_ALIGNED_BLOCK` (flag-gated, D2 shadow + AI skip),
+  (2) regime-conditional `structWRByRegime` calibration + regime-aware cap,
+  (3) version 6.10.2→6.10.3, (4) T45 tests (10 assertion), d2 #10 update, r71 dynamic re-baseline।
+- **Tests:** fix_tests 321/0 · d2 41/0 · r71 117/0 (re-baselined) · 7 other suites green · bundle 324,906B sha cc9a680b。
+- **Honest impact:** blocks ~39% signals (fewer-but-better); pooled WR ~44.3%→~46.3% (post-calib ~48.5%→~50.4%);
+  **still below 55.6% breakeven — NOT 75%** (no curve-fit, no invented edge)।
+- **Also found:** D2_TRENDING_BLOCK live-এ working (v6.10.2); ~6-19 TRENDING/day আগে leak হতো (pre-v6.10.2)।
+- **PR materials (drive pr/):** accuracy-v6103.patch · PR_BODY_accuracy_v6103.md · apply_worker_pr_v6103.sh
+  (+ bundle in bundles/worker-v6103-20260815.js)। Branch: feat/accuracy-v6103। User merges + deploys।
