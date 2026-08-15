@@ -192,3 +192,15 @@ User report: "onek besi false block kore"। Code-এ ৬টা স্পষ্�
 - patch: drive `pr/m15_ci_fix.patch` (sha ab358ba8…), PR body `pr/PR_BODY_m15_ci_fix.md`।
 - Merge-এর পর Actions-এ প্রথম real compile → M1-এর TFLite port-ও compile-check হবে।
 - **Next:** build সবুজ হলে M2 (accessibility service-এ NSFW scan hook)।
+
+---
+
+## 15. M2 DONE — accessibility service-এ NSFW scan hook (PR-ready)
+
+- `blockers/GuardianBlocker.kt` (new, 302 lines) + `services/AppBlockerService.kt` (+15 wiring)।
+- Scan path: WINDOW_STATE/CONTENT_CHANGED → keyword text scan + throttled AI screenshot (API 30+,
+  full-screen requireStrongNsfw=true + legacy isUnsafe) → block = HOME + Toast (M4-এ full overlay)।
+- agents.md invariants: try/catch + CrashLogger.logNonFatalError + CancellationException rethrow।
+- Config: SharedPreferences `guardian_prefs` (M3 UI-র setter ready)।
+- patch: drive `pr/m2_service_hook.patch` (sha d66e5b5e…), PR body `pr/PR_BODY_m2_service_hook.md`।
+- ⚠️ compile = CI (মার্জের পর auto-build)। **Next M3:** settings UI (toggle/gender/threshold/model import)।
