@@ -1,0 +1,288 @@
+diff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+index a25a00a..ccdbe4f 100644
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -33,6 +33,12 @@
+         android:theme="@style/Theme.Curbox"
+         tools:targetApi="34">
+ 
++        <activity
++            android:name=".ui.overlay.GuardianBlockActivity"
++            android:excludeFromRecents="true"
++            android:exported="false"
++            android:launchMode="singleTop" />
++
+         <activity
+             android:name=".ui.activity.WarningActivity"
+             android:excludeFromRecents="true"
+diff --git a/app/src/main/java/neth/iecal/curbox/blockers/GuardianBlocker.kt b/app/src/main/java/neth/iecal/curbox/blockers/GuardianBlocker.kt
+index ac40e2f..9490471 100644
+--- a/app/src/main/java/neth/iecal/curbox/blockers/GuardianBlocker.kt
++++ b/app/src/main/java/neth/iecal/curbox/blockers/GuardianBlocker.kt
+@@ -23,6 +23,7 @@ import neth.iecal.curbox.guardian.GuardianAiDetector
+ import neth.iecal.curbox.guardian.GuardianConfig
+ import neth.iecal.curbox.guardian.GuardianKeywordMatcher
+ import neth.iecal.curbox.services.BaseBlockingService
++import neth.iecal.curbox.ui.overlay.GuardianBlockActivity
+ 
+ /**
+  * Guardian (NSFW content blocking) — accessibility-service hook.
+@@ -261,23 +262,42 @@ class GuardianBlocker {
+     private fun currentPackage(): String? =
+         service.rootInActiveWindow?.packageName?.toString()
+ 
+-    /** Minimal block: go home + notify. Full overlay/unlock UI lands in M4. */
++    /** Block: full-screen GuardianBlockActivity + event log (M4). */
+     private fun block(reason: String) {
+         Handler(Looper.getMainLooper()).post {
+             try {
+-                service.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME)
+-                Toast.makeText(
+-                    service,
+-                    "Guardian: NSFW content blocked ($reason)",
+-                    Toast.LENGTH_SHORT,
+-                ).show()
+-                Log.i(TAG, "Blocked package=${currentPackage()} reason=$reason")
++                val pkg = currentPackage() ?: ""
++                logBlock(pkg, reason)
++                GuardianBlockActivity.start(service, reason, pkg)
++                Log.i(TAG, "Blocked package=$pkg reason=$reason")
+             } catch (t: Throwable) {
++                // Fail-open to go-home so the block never silently breaks.
++                try {
++                    service.performGlobalAction(
++                        android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_HOME
++                    )
++                } catch (_: Throwable) {}
+                 crashLogger.logNonFatalError(Exception(t))
+             }
+         }
+     }
+ 
++    /** Appends a block event to the ring-buffer log (SharedPreferences). */
++    private fun logBlock(pkg: String, reason: String) {
++        try {
++            val now = java.text.SimpleDateFormat(
++                "yyyy-MM-dd HH:mm:ss",
++                java.util.Locale.getDefault(),
++            ).format(java.util.Date())
++            val entry = "$now | $pkg | $reason"
++            val existing = prefs.getString("block_log", "") ?: ""
++            val lines = existing.split("\n").filter { it.isNotBlank() }.takeLast(499) + entry
++            prefs.edit { putString("block_log", lines.joinToString("\n")) }
++        } catch (t: Throwable) {
++            crashLogger.logNonFatalError(Exception(t))
++        }
++    }
++
+     // ── Config helpers (used by the M3 settings UI later) ───────────────────
+ 
+     fun setEnabled(context: Context, enabled: Boolean) {
+diff --git a/app/src/main/java/neth/iecal/curbox/ui/fragments/main/reducers/guardian/GuardianFragment.kt b/app/src/main/java/neth/iecal/curbox/ui/fragments/main/reducers/guardian/GuardianFragment.kt
+index 38508eb..bb71882 100644
+--- a/app/src/main/java/neth/iecal/curbox/ui/fragments/main/reducers/guardian/GuardianFragment.kt
++++ b/app/src/main/java/neth/iecal/curbox/ui/fragments/main/reducers/guardian/GuardianFragment.kt
+@@ -186,6 +186,18 @@ class GuardianFragment : Fragment() {
+             openDocument.launch("*/*")
+         }
+ 
++        // ── activity log ────────────────────────────────────────────────────────
++        val logView = view.findViewById<TextView>(R.id.guardian_block_log)
++        fun refreshLog() {
++            val log = prefs.getString("block_log", "") ?: ""
++            logView.text = if (log.isBlank()) getString(R.string.guardian_log_empty) else log
++        }
++        refreshLog()
++        view.findViewById<MaterialButton>(R.id.btn_log_clear).setOnClickListener {
++            prefs.edit().putString("block_log", "").apply()
++            refreshLog()
++        }
++
+         view.findViewById<MaterialButton>(R.id.btn_back).setOnClickListener {
+             requireActivity().onBackPressedDispatcher.onBackPressed()
+         }
+diff --git a/app/src/main/java/neth/iecal/curbox/ui/overlay/GuardianBlockActivity.kt b/app/src/main/java/neth/iecal/curbox/ui/overlay/GuardianBlockActivity.kt
+new file mode 100644
+index 0000000..772f4ae
+--- /dev/null
++++ b/app/src/main/java/neth/iecal/curbox/ui/overlay/GuardianBlockActivity.kt
+@@ -0,0 +1,70 @@
++package neth.iecal.curbox.ui.overlay
++
++import android.content.Context
++import android.content.Intent
++import android.os.Bundle
++import android.widget.TextView
++import androidx.appcompat.app.AppCompatActivity
++import com.google.android.material.button.MaterialButton
++import neth.iecal.curbox.R
++import neth.iecal.curbox.ui.activity.FragmentActivity
++
++/**
++ * Full-screen block shown when Guardian detects NSFW content (M4).
++ *
++ * Deliberately NOT the AppBlocker WarningActivity — that screen is config- and
++ * mode-driven; Guardian needs a simple, predictable screen: why it was blocked,
++ * a "go home" action and a link to the Guardian settings.
++ */
++class GuardianBlockActivity : AppCompatActivity() {
++
++    companion object {
++        const val EXTRA_REASON = "guardian_reason"
++        const val EXTRA_PACKAGE = "guardian_package"
++        const val EXTRA_TIME = "guardian_time"
++
++        fun start(context: Context, reason: String, pkg: String) {
++            val intent = Intent(context, GuardianBlockActivity::class.java).apply {
++                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
++                putExtra(EXTRA_REASON, reason)
++                putExtra(EXTRA_PACKAGE, pkg)
++                putExtra(EXTRA_TIME, System.currentTimeMillis())
++            }
++            context.startActivity(intent)
++        }
++    }
++
++    override fun onCreate(savedInstanceState: Bundle?) {
++        super.onCreate(savedInstanceState)
++        setContentView(R.layout.activity_guardian_block)
++
++        val reason = intent.getStringExtra(EXTRA_REASON) ?: "NSFW content"
++        val pkg = intent.getStringExtra(EXTRA_PACKAGE) ?: ""
++
++        findViewById<TextView>(R.id.guardian_block_reason).text =
++            getString(R.string.guardian_block_reason_fmt, reason)
++        findViewById<TextView>(R.id.guardian_block_package).text =
++            getString(R.string.guardian_block_package_fmt, pkg)
++
++        findViewById<MaterialButton>(R.id.btn_go_home).setOnClickListener {
++            val home = Intent(Intent.ACTION_MAIN).apply {
++                addCategory(Intent.CATEGORY_HOME)
++                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
++            }
++            startActivity(home)
++            finish()
++        }
++
++        findViewById<MaterialButton>(R.id.btn_guardian_settings).setOnClickListener {
++            val settings = Intent(this, FragmentActivity::class.java).apply {
++                putExtra(
++                    "fragment",
++                    neth.iecal.curbox.ui.fragments.main.reducers.guardian.GuardianFragment.FRAGMENT_ID,
++                )
++                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
++            }
++            startActivity(settings)
++            finish()
++        }
++    }
++}
+diff --git a/app/src/main/res/layout/activity_guardian_block.xml b/app/src/main/res/layout/activity_guardian_block.xml
+new file mode 100644
+index 0000000..7629ab3
+--- /dev/null
++++ b/app/src/main/res/layout/activity_guardian_block.xml
+@@ -0,0 +1,49 @@
++<?xml version="1.0" encoding="utf-8"?>
++<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
++    xmlns:app="http://schemas.android.com/apk/res-auto"
++    android:layout_width="match_parent"
++    android:layout_height="match_parent"
++    android:gravity="center"
++    android:orientation="vertical"
++    android:padding="32dp">
++
++    <TextView
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:text="@string/guardian_block_title"
++        android:textAppearance="@style/TextAppearance.Material3.HeadlineSmall"
++        android:textColor="?attr/colorOnSurface" />
++
++    <TextView
++        android:id="@+id/guardian_block_reason"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="16dp"
++        android:gravity="center"
++        android:textAppearance="@style/TextAppearance.Material3.BodyLarge"
++        android:textColor="?attr/colorOnSurfaceVariant" />
++
++    <TextView
++        android:id="@+id/guardian_block_package"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="8dp"
++        android:gravity="center"
++        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
++        android:textColor="?attr/colorOutline" />
++
++    <com.google.android.material.button.MaterialButton
++        android:id="@+id/btn_go_home"
++        android:layout_width="match_parent"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="32dp"
++        android:text="@string/guardian_go_home" />
++
++    <com.google.android.material.button.MaterialButton
++        android:id="@+id/btn_guardian_settings"
++        style="@style/Widget.Material3.Button.TextButton"
++        android:layout_width="wrap_content"
++        android:layout_height="wrap_content"
++        android:layout_marginTop="8dp"
++        android:text="@string/guardian_block_settings" />
++</LinearLayout>
+diff --git a/app/src/main/res/layout/fragment_guardian.xml b/app/src/main/res/layout/fragment_guardian.xml
+index cc07a17..38432e4 100644
+--- a/app/src/main/res/layout/fragment_guardian.xml
++++ b/app/src/main/res/layout/fragment_guardian.xml
+@@ -403,5 +403,31 @@
+             </LinearLayout>
+         </com.google.android.material.card.MaterialCardView>
+ 
++        <!-- Activity log -->
++        <TextView
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="28dp"
++            android:layout_marginBottom="8dp"
++            android:text="@string/guardian_log_title"
++            android:textAppearance="@style/TextAppearance.Material3.TitleSmall"
++            android:textColor="?attr/colorOnSurface" />
++
++        <com.google.android.material.button.MaterialButton
++            android:id="@+id/btn_log_clear"
++            style="@style/Widget.Material3.Button.TextButton"
++            android:layout_width="wrap_content"
++            android:layout_height="wrap_content"
++            android:text="@string/guardian_log_clear" />
++
++        <TextView
++            android:id="@+id/guardian_block_log"
++            android:layout_width="match_parent"
++            android:layout_height="wrap_content"
++            android:layout_marginTop="8dp"
++            android:fontFamily="monospace"
++            android:textAppearance="@style/TextAppearance.Material3.BodySmall"
++            android:textColor="?attr/colorOnSurfaceVariant" />
++
+     </LinearLayout>
+ </androidx.core.widget.NestedScrollView>
+diff --git a/app/src/main/res/values/strings.xml b/app/src/main/res/values/strings.xml
+index be40ef5..f4082b0 100755
+--- a/app/src/main/res/values/strings.xml
++++ b/app/src/main/res/values/strings.xml
+@@ -1719,4 +1719,13 @@
+     <string name="guardian_model_import_failed">Import failed for %1$s</string>
+     <string name="guardian_card_title">Guardian AI</string>
+     <string name="guardian_card_subtitle">Block NSFW content</string>
++
++    <string name="guardian_block_title">Content Blocked</string>
++    <string name="guardian_block_reason_fmt">Guardian blocked: %1$s</string>
++    <string name="guardian_block_package_fmt">App: %1$s</string>
++    <string name="guardian_go_home">Go home</string>
++    <string name="guardian_block_settings">Guardian settings</string>
++    <string name="guardian_log_title">Block log</string>
++    <string name="guardian_log_clear">Clear log</string>
++    <string name="guardian_log_empty">No blocks yet.</string>
+ </resources>

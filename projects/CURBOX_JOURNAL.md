@@ -216,3 +216,14 @@ User report: "onek besi false block kore"। Code-এ ৬টা স্পষ্�
 - Pattern: curbox reducer/card/fragment style, SharedPreferences + broadcast reload। No Compose।
 - patch: drive `pr/m3_settings_ui.patch` (sha 6744451e…), PR body `pr/PR_BODY_m3_settings_ui.md`।
 - ⚠️ compile = CI। **Next M4:** AI-block overlay (go-home+toast → proper block screen) + activity log।
+
+---
+
+## 17. M4 DONE — AI-block overlay + activity log (PR-ready)
+
+- `GuardianBlockActivity.kt` (full-screen block: reason/pkg + go-home + settings) + layout +
+  manifest registration + `GuardianBlocker.logBlock()` (SharedPreferences 500-entry ring buffer) +
+  GuardianFragment-এ block-log view/clear + 8 strings।
+- block action: GuardianBlockActivity.start() + fail-open go-home fallback।
+- patch: drive `pr/m4_overlay_log.patch` (sha 3e3d706d…), PR body `pr/PR_BODY_m4_overlay_log.md`।
+- ⚠️ compile = CI। **Next M5:** device test (model import + enable + false-block/miss verify)।
