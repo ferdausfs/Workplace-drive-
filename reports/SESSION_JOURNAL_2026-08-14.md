@@ -269,3 +269,20 @@
   ~46% (post-calib ~50%), (3) self-calib cron 08-17 Monday-তে fire করবে (dynamic table)।
 - **Honest expectation (আবার):** data-backed ধাপ, breakeven 55.6%-এর কাছাকাছি; 75% নয়।
 - Drive canonical: `e7ac04cd` (accuracy PR materials)। Live worker: 6.10.3।
+
+---
+
+## 24. ADDENDUM — BOT "Watch ALL" + pair-list fix (PR-ready, 2026-08-15)
+
+- **User report:** bot ২-৫ signal/day পাচ্ছে, worker অনেক বেশি emit করে।
+- **Root cause (data+code):** (1) bot-এর pair list-এ DOT/USD + LINK/USD missing (worker-এর best pair, 50%+ WR);
+  (2) MAX_WL=6 watchlist cap; (3) worker subscriber gate শুধু pair+watchlist ম্যাচ — "সব pair" mode ছিল না।
+  (4) accuracy blocks (TRENDING + RANGING+ALIGNED) signal volume কমিয়েছে — এটা intended trade-off, bug নয়।
+- **Changes:** bot v4.5.1 (DOT+LINK add, watchAll field, ⚡ Watch ALL toggle, /watchall) + worker
+  (getMatchingSubscribers-এ watchAll=true হলে pair gate bypass, বাকি gate অটুট)।
+- **Tests:** bot 74/60/72 green · worker fix_tests 326/0 (new T46, 5 assertion) · বাকি suite green।
+- **PR materials (drive pr/):** watchall_bot.patch · watchall_worker.patch · PR_BODY_watchall.md ·
+  apply_watchall_pr.sh (2 repo একসাথে, verified end-to-end)। Branch: feat/watch-all (দুটো repo)।
+- **Honest note:** Watch ALL = distribution fix (সব emitted signal bot-এ আসবে), NOT volume-200+।
+  Profit-এর আসল পথ = accuracy (breakeven 55.6%); এটা signal পৌঁছানোর সমস্যা ঠিক করে।
+- Deploy after merge: worker bundle + bot bundle (bot_deploy2.sh)।

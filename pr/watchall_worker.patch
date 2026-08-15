@@ -1,0 +1,73 @@
+diff --git a/scripts/fix_tests.mjs b/scripts/fix_tests.mjs
+index 9d69f46..3785445 100644
+--- a/scripts/fix_tests.mjs
++++ b/scripts/fix_tests.mjs
+@@ -50,7 +50,7 @@
+ import fs from 'node:fs';
+ import { fileURLToPath } from 'node:url';
+ import { classifyOutcome, fetchExpiryPrice, scheduledTracker, saveSignalToHistory, updatePairStats, getDynamicConfidenceAdjustment } from '../src/history/stats.js';
+-import { passAI, passGrade, pushSignalToSubscribers } from '../src/handlers/pushToSubscribers.js';
++import { passAI, passGrade, pushSignalToSubscribers, getMatchingSubscribers } from '../src/handlers/pushToSubscribers.js';
+ import { handleReport, handleHistory } from '../src/handlers/health.js';
+ import { handleSignalRaw, handleSignal } from '../src/handlers/signal.js';
+ import { __scanTest } from '../src/handlers/scheduledScan.js';
+@@ -1931,6 +1931,42 @@ console.log('\n── T45: regime-conditional calibration + RANGING/ALIGNED bloc
+   ok('T45j: D2_RANGING_ALIGNED_BLOCK_ENABLED flag present', cfg.includes('D2_RANGING_ALIGNED_BLOCK_ENABLED: true'));
+ }
+ 
++console.log('\n── T46: Watch-ALL mode — pair/watchlist gate bypassed, other gates kept (v4.5.1) ──');
++{
++  const sigOf = (p) => ({
++    id: 'sig_t46', pair: p,
++    signal: { finalSignal: 'BUY', confidence: '85%', grade: { grade: 'A', label: 'STRONG' } },
++  });
++  const mk = (user) => {
++    const seed = { 'u:111': user, auto_users: ['111'] };
++    return { BOT_KV: makeKV(seed), SIGNAL_CACHE: makeKV() };
++  };
++
++  // (a) no watchAll, ETH/USD not watched -> no match
++  {
++    const env = mk({ pair: 'BTCUSD', watchlist: [], autoEnabled: true, gradeFilter: 'ALL', minConfidence: 0, aiOnlyMode: false });
++    const m = await getMatchingSubscribers(sigOf('ETH/USD'), env);
++    eq('T46a: without watchAll, unwatched pair -> no match', m.length, 0);
++  }
++
++  // (b) watchAll: true -> matches ANY pair
++  {
++    const env = mk({ pair: 'BTCUSD', watchlist: [], autoEnabled: true, gradeFilter: 'ALL', minConfidence: 0, aiOnlyMode: false, watchAll: true });
++    const m = await getMatchingSubscribers(sigOf('ETH/USD'), env);
++    eq('T46b: watchAll=true matches unwatched pair', m.length, 1);
++    eq('T46b: matched chatId correct', m[0].chatId, '111');
++  }
++
++  // (c) watchAll does NOT bypass autoEnabled or grade gate
++  {
++    const envOff = mk({ pair: 'BTCUSD', watchlist: [], autoEnabled: false, gradeFilter: 'ALL', minConfidence: 0, aiOnlyMode: false, watchAll: true });
++    eq('T46c: watchAll does NOT bypass autoEnabled', (await getMatchingSubscribers(sigOf('ETH/USD'), envOff)).length, 0);
++    const envG = mk({ pair: 'BTCUSD', watchlist: [], autoEnabled: true, gradeFilter: 'A', minConfidence: 0, aiOnlyMode: false, watchAll: true });
++    const sigC = { id: 'sig_t46c', pair: 'ETH/USD', signal: { finalSignal: 'BUY', confidence: '85%', grade: { grade: 'C', label: 'MODERATE' } } };
++    eq('T46c: watchAll does NOT bypass gradeFilter', (await getMatchingSubscribers(sigC, envG)).length, 0);
++  }
++}
++
+ console.log('\n───────────────────────────────────────────────────────────');
+ console.log(fail === 0 ? 'PASS: ' + pass + '   FAIL: 0' : 'PASS: ' + pass + '   FAIL: ' + fail);
+ console.log(fail === 0 ? 'ALL FIX TESTS PASSED' : 'FAILURES: ' + failures.join(', '));
+diff --git a/src/handlers/pushToSubscribers.js b/src/handlers/pushToSubscribers.js
+index 91d2e0d..7663c8b 100644
+--- a/src/handlers/pushToSubscribers.js
++++ b/src/handlers/pushToSubscribers.js
+@@ -228,7 +228,11 @@ export async function getMatchingSubscribers(signal, env, diag = null) {
+       const watched = [user.pair, ...(Array.isArray(user.watchlist) ? user.watchlist : [])]
+         .filter(Boolean)
+         .map(normPair);
+-      if (!watched.includes(want)) {
++      // [v4.5.1] "Watch ALL" — user opted into every emitted signal, so the
++      // pair/watchlist gate is bypassed (the other gates — autoEnabled,
++      // confidence, grade, AI — still apply).
++      const watchAll = user.watchAll === true || user.watchAll === 1 || user.watchAll === 'true';
++      if (!watchAll && !watched.includes(want)) {
+         if (diag) diag.skips.push({
+           chatId: String(cid), reason: 'pair-not-watched',
+           want, pair: user.pair || null,
