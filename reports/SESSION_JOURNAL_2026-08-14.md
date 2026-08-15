@@ -225,3 +225,16 @@
   - PR materials → `Workplace-drive-/pr/`
 - **Open item (user):** stale PR #18 close করা বাকি — https://github.com/ferdausfs/Ftt-Otc-v6/pull/18
 - **Next Phase F step:** আগামীকাল fresh snapshot → unfilled PENDING_ENTRY আর fake WIN হবে না (v6.10.2 fix)।
+
+---
+
+## 21. ADDENDUM — DAILY ROUTINE CHECKUP 2026-08-15
+
+- Fresh live snapshot (18 pair, HTTP 200) → `data/phase_f_forward_2026-08-15.tar.gz`।
+- **🎉 v6.10.2 fix LIVE-CONFIRMED:** post-deploy (≥08-14T13:10Z) ২টা unfilled PENDING_ENTRY → **TIE** (আগে 43/43 fake WIN)।
+- Forward WR **44.4%** (4187 decided) — breakeven NOT cleared; pre/post round-3 41.7%→48.5% অপরিবর্তিত।
+- 08-15 মাত্র ৩ ঘণ্টা (n=5) — early।
+- D4 ML: no edge (LEGIT confident-only 40.4%)।
+- **🟡 Retention caveat:** `/api/history` per-pair cap 500 — ADA/USD, AVAX/USD cap-এ; 08-01 ছাঁটাই হচ্ছে (333→325)।
+  Conclusion বদলায় না, কিন্তু daily tar.gz archive (drive data/) হচ্ছে একমাত্র স্থায়ী record।
+- Report: `reports/PHASE_F_2026-08-15.md` · Analysis script: `scripts/daily_checkup.py`।
