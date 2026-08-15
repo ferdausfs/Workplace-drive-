@@ -227,3 +227,16 @@ User report: "onek besi false block kore"। Code-এ ৬টা স্পষ্�
 - block action: GuardianBlockActivity.start() + fail-open go-home fallback।
 - patch: drive `pr/m4_overlay_log.patch` (sha 3e3d706d…), PR body `pr/PR_BODY_m4_overlay_log.md`।
 - ⚠️ compile = CI। **Next M5:** device test (model import + enable + false-block/miss verify)।
+
+---
+
+## 18. M5.5 DONE — model bundle + validity check (PR-ready)
+
+- **Model converted নিজে:** NSFWJS MobileNetV2 (npm, uint8) → float32 TFLite 224x224x3 5-class।
+  Verified: 266/266 weights dequantized+loaded, TFLite inference OK (gray img → Drawing 0.84/Porn 0.009)।
+  SHA 8229bafa…, 10,317,360 bytes। Deliverable: DOK-ai-models.tar.gz (+MODEL_README)।
+- **Code (4 file, +86):** GuardianModelImportManager.modelStatus() (imported/bundled/missing) +
+  verifyFile() (TFLite shape check, wrong-file reject) + Fragment status UI + gender-hint।
+- **Split:** code patch `pr/m55_model_bundle.patch` (sha 294ad87d…); model files আলাদা commit
+  (আমার দেওয়া command-এ user করবে — 20MB binary transport এড়াতে)।
+- **Next (M5 final):** merge + model commit + CI build → install → enable → device test।
