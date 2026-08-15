@@ -255,3 +255,17 @@
 - **Also found:** D2_TRENDING_BLOCK live-এ working (v6.10.2); ~6-19 TRENDING/day আগে leak হতো (pre-v6.10.2)।
 - **PR materials (drive pr/):** accuracy-v6103.patch · PR_BODY_accuracy_v6103.md · apply_worker_pr_v6103.sh
   (+ bundle in bundles/worker-v6103-20260815.js)। Branch: feat/accuracy-v6103। User merges + deploys।
+
+---
+
+## 23. FINAL — v6.10.3 DEPLOYED LIVE + verified (2026-08-15 ~04:42Z)
+
+- **PR #23 merged** → worker main `2249666` (10 files, 144+/35-, mergeable clean) — reviewer-verified on GitHub.
+- **v6.10.3 deployed live:** `/health` version 6.10.3, push healthy (tokenValid true, fttbotbot),
+  scanner firing (newestCachedAge <300s)। Upload HTTP 200, crons HTTP 200 (5-field fix কাজ করেছে — 10100 নেই)।
+- **Block live:** deployed bundle-এ `D2_RANGING_ALIGNED_BLOCK` present (4x)। এই মুহূর্তে কোনো RANGING+ALIGNED
+  candidate soft-filters পাস করেনি (0 blocked এই scan-এ — condition met হয়নি, code deterministic)।
+- **Forward verification বাকি:** আগামীকালের snapshot-এ — (1) RANGING+ALIGNED signal emit বন্ধ, (2) pooled WR
+  ~46% (post-calib ~50%), (3) self-calib cron 08-17 Monday-তে fire করবে (dynamic table)।
+- **Honest expectation (আবার):** data-backed ধাপ, breakeven 55.6%-এর কাছাকাছি; 75% নয়।
+- Drive canonical: `e7ac04cd` (accuracy PR materials)। Live worker: 6.10.3।
