@@ -180,3 +180,15 @@ User report: "onek besi false block kore"। Code-এ ৬টা স্পষ্�
 - patch: drive `pr/m1_ai_engine.patch` (sha 803748c6…), PR body `pr/PR_BODY_m1_ai_engine.md`।
 - ⚠️ Compile হয়নি (Android SDK নেই sandbox-এ) — user merge-এর পর CI build; syntax error হলে আমি ঠিক করবো।
 - **Next M2:** accessibility service-এ content-scan hook (screenshot → region scan → block)।
+
+---
+
+## 14. M1.5 — CI workflow fix (DOK-ai build চালু)
+
+- **Root cause found:** DOK-ai-তে curbox-এর ৪ workflow copy — trigger `kt-rewrite` branch-এ hardcode
+  (DOK-ai = main) + Discord/Telegram/VirusTotal/SIGNING_KEY secrets mismatch → Actions runs=0।
+- **Fix:** নতুন clean `build.yml` (push/PR/main, JDK17+SDK, assembleFdroidDebug, artifact upload);
+  পুরনো ৪ workflow সরানো।
+- patch: drive `pr/m15_ci_fix.patch` (sha ab358ba8…), PR body `pr/PR_BODY_m15_ci_fix.md`।
+- Merge-এর পর Actions-এ প্রথম real compile → M1-এর TFLite port-ও compile-check হবে।
+- **Next:** build সবুজ হলে M2 (accessibility service-এ NSFW scan hook)।
