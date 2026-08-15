@@ -253,3 +253,17 @@ User report: "onek besi false block kore"। Code-এ ৬টা স্পষ্�
 - **Fix:** threshold `coerceIn(0.50,0.95)` · voteNeeded=gridVoteCount(2) · full-screen 0.70 · variance 150..9000।
 - patch: drive `pr/m56_threshold_fix.patch` (sha a0d0e1da…), PR body `pr/PR_BODY_m56_threshold_fix.md`।
 - **Honest:** NSFW-positive test user-এর phone-এই (আমি NSFW fetch/generate করিনি)। Threshold slider-এ tune।
+
+---
+
+## 20. DOK-ai DROPPED → Dogs-of-KAHAF = MAIN APP (user decision 2026-08-15)
+
+- **Decision:** নতুন app (DOK-ai) বাদ। Dogs-of-KAHAF (Guardian Shield)-এই blocking কাজ করে →
+  এটাই main app; একে "complete productivity" বানানো হবে। কাজ এখন `ferdausfs/Dogs-of-KAHAF`-এ।
+- **Bug audit (static):** CI release automation-এ ৪ bug (tag v2.2.0 hardcoded → release fail,
+  artifact name stale, wrapper jar mismatch, stale body) → FIXED (pr/ci_fix.patch)।
+  Threshold floor 0.80 (slider half-range dead) → FLAGGED, behavior change তাই user-এর call।
+  Stability code (watchdog/backoff/containment) intact; কোনো TODO/crash-pattern পাইনি।
+  ⚠️ sandbox-এ SDK নেই — compile হয়নি, CI=truth।
+- Reports: `reports/Dogs_of_KAHAF_BUG_AUDIT_2026-08-15.md` + PR body `pr/PR_BODY_ci_fix.md`।
+- **Next:** productivity feature roadmap (user priority নিতে হবে)।
