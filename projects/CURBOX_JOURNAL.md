@@ -240,3 +240,16 @@ User report: "onek besi false block kore"। Code-এ ৬টা স্পষ্�
 - **Split:** code patch `pr/m55_model_bundle.patch` (sha 294ad87d…); model files আলাদা commit
   (আমার দেওয়া command-এ user করবে — 20MB binary transport এড়াতে)।
 - **Next (M5 final):** merge + model commit + CI build → install → enable → device test।
+
+---
+
+## 19. M5.6 — NSFW-not-blocking root cause + fix (PR-ready)
+
+- **Sandbox test:** bundled model ২ safe ছবিতে চালানো → Neutral 0.97/Porn ~0 (no false positive),
+  weights meaningful। Model-এর দোষ নয়।
+- **Root cause (code):** Phase-1 overcorrection-এর ৩ strictness — (1) `aiThreshold.coerceAtLeast(0.80)`
+  floor (slider 0.72 অকার্যকর), (2) grid `voteNeeded=+1` (৩ cell ≥0.80 লাগত), (3) full-screen gate 0.80,
+  (4) variance 200..8500।
+- **Fix:** threshold `coerceIn(0.50,0.95)` · voteNeeded=gridVoteCount(2) · full-screen 0.70 · variance 150..9000।
+- patch: drive `pr/m56_threshold_fix.patch` (sha a0d0e1da…), PR body `pr/PR_BODY_m56_threshold_fix.md`।
+- **Honest:** NSFW-positive test user-এর phone-এই (আমি NSFW fetch/generate করিনি)। Threshold slider-এ tune।
