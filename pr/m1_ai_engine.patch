@@ -1,0 +1,738 @@
+diff --git a/app/build.gradle.kts b/app/build.gradle.kts
+index 6d4fb52..e018b97 100644
+--- a/app/build.gradle.kts
++++ b/app/build.gradle.kts
+@@ -43,6 +43,7 @@ androidComponents {
+ android {
+     namespace = "neth.iecal.curbox"
+     compileSdk = 35
++    androidResources { noCompress += "tflite" }
+     flavorDimensions += "version"
+ 
+     lint {
+@@ -213,6 +214,10 @@ dependencies {
+     implementation(libs.mpandroidchart)
+     implementation(libs.timerangepicker)
+ 
++    // Guardian (NSFW content blocking) — on-device TFLite AI
++    implementation(libs.tensorflow.lite)
++    implementation(libs.tensorflow.lite.gpu)
++
+ }
+ androidComponents {
+     onVariants { variant ->
+diff --git a/app/src/main/java/neth/iecal/curbox/guardian/GuardianAiDetector.kt b/app/src/main/java/neth/iecal/curbox/guardian/GuardianAiDetector.kt
+new file mode 100644
+index 0000000..c61cb6b
+--- /dev/null
++++ b/app/src/main/java/neth/iecal/curbox/guardian/GuardianAiDetector.kt
+@@ -0,0 +1,471 @@
++package neth.iecal.curbox.guardian
++
++import android.content.Context
++import android.graphics.Bitmap
++import android.util.Log
++import kotlinx.coroutines.sync.Mutex
++import kotlinx.coroutines.sync.withLock
++import org.tensorflow.lite.Interpreter
++import org.tensorflow.lite.gpu.CompatibilityList
++import org.tensorflow.lite.gpu.GpuDelegate
++import java.io.File
++import java.io.FileInputStream
++import java.nio.ByteBuffer
++import java.nio.ByteOrder
++import java.nio.MappedByteBuffer
++import java.nio.channels.FileChannel
++
++/**
++ * Runtime configuration for the detector. The UI/service sets these values
++ * (M3 wires them to the Curbox settings store). Volatile fields + a single
++ * data class keep the port Hilt-free and simple.
++ */
++data class GuardianConfig(
++    var aiEnabled: Boolean = false,
++    var userGender: String = "NONE",   // "NONE" | "MALE" | "FEMALE"
++    var aiThreshold: Float = 0.72f,     // legacy combined classifier
++    var nsfwGateThreshold: Float = 0.68f,
++    var genderThreshold: Float = 0.78f,
++    var gridVoteCount: Int = 2
++)
++
++/**
++ * On-device NSFW detection engine (TFLite).
++ *
++ * Ported from Dogs-of-KAHAF `AiDetector`, adapted to Curbox style (no Hilt,
++ * no Timber). Includes the Phase-1 false-block fixes:
++ *  1. opposite-gender blocking always requires the FULL gender confidence
++ *     (the "soft NSFW" path that lowered it to 0.62 is removed);
++ *  2. full-screen callers pass requireStrongNsfw=true, raising the NSFW gate
++ *     to 0.80 before the gender model runs on a noisy whole screenshot.
++ *
++ * Three models, all optional (each feature fail-opens to "no block"):
++ *  - guardian_model.tflite : legacy combined classifier
++ *  - nsfw_model.tflite     : dedicated NSFW gate
++ *  - gender_model.tflite   : male/female classifier (2 outputs)
++ */
++class GuardianAiDetector(private val context: Context) {
++
++    private val tag = "GuardianAi"
++
++    private val inferenceLock = Mutex()
++    private var legacyInterpreter: Interpreter? = null
++    private var nsfwInterpreter: Interpreter? = null
++    private var genderInterpreter: Interpreter? = null
++    private var gpuDelegate: GpuDelegate? = null
++
++    // Reusable buffers to reduce GC pressure.
++    private var inputBuffer: ByteBuffer? = null
++    private var pixelsArray: IntArray? = null
++
++    @Volatile
++    private var consecutiveInferenceFails = 0
++    private val inferenceFailThreshold = 3
++
++    /** Live config snapshot. Mutate fields from the main thread / settings UI. */
++    @Volatile
++    var config: GuardianConfig = GuardianConfig()
++
++    // ── model lifecycle ────────────────────────────────────────────────────
++
++    fun isLegacyAvailable(): Boolean = legacyInterpreter != null
++    fun isGenderModelAvailable(): Boolean = genderInterpreter != null
++    fun isNsfwGateAvailable(): Boolean = nsfwInterpreter != null
++
++    suspend fun ensureLoaded() {
++        inferenceLock.withLock {
++            if (legacyInterpreter == null) legacyInterpreter = tryLoad(GuardianConstants.MODEL_LEGACY)
++            if (nsfwInterpreter == null) nsfwInterpreter = tryLoad(GuardianConstants.MODEL_NSFW)
++            if (genderInterpreter == null) genderInterpreter = tryLoad(GuardianConstants.MODEL_GENDER)
++        }
++    }
++
++    fun reloadModels() {
++        // Called after importing a new model file: drop + lazily reload next use.
++        try { legacyInterpreter?.close() } catch (_: Throwable) {}
++        try { nsfwInterpreter?.close() } catch (_: Throwable) {}
++        try { genderInterpreter?.close() } catch (_: Throwable) {}
++        try { gpuDelegate?.close() } catch (_: Throwable) {}
++        legacyInterpreter = null
++        nsfwInterpreter = null
++        genderInterpreter = null
++        gpuDelegate = null
++    }
++
++    fun close() {
++        try { legacyInterpreter?.close() } catch (_: Throwable) {}
++        try { nsfwInterpreter?.close() } catch (_: Throwable) {}
++        try { genderInterpreter?.close() } catch (_: Throwable) {}
++        try { gpuDelegate?.close() } catch (_: Throwable) {}
++        legacyInterpreter = null
++        nsfwInterpreter = null
++        genderInterpreter = null
++        gpuDelegate = null
++        inputBuffer = null
++        pixelsArray = null
++    }
++
++    private fun tryLoad(name: String, forceCpu: Boolean = false): Interpreter? {
++        return try {
++            val buffer = loadModelBuffer(name) ?: return null
++            buildInterpreter(buffer, forceCpu).also {
++                Log.i(tag, "Loaded: $name (cpu=$forceCpu)")
++            }
++        } catch (t: Throwable) {
++            Log.w(tag, "Failed to load $name", t)
++            null
++        }
++    }
++
++    private fun loadModelBuffer(name: String): ByteBuffer? {
++        val f = File(context.filesDir, name)
++        if (f.exists() && f.length() > 0) {
++            return try {
++                FileInputStream(f).channel.use { ch ->
++                    ch.map(FileChannel.MapMode.READ_ONLY, 0, ch.size())
++                } as MappedByteBuffer
++            } catch (t: Throwable) {
++                Log.w(tag, "mmap failed; byte copy $name", t)
++                val bytes = f.readBytes()
++                ByteBuffer.allocateDirect(bytes.size)
++                    .order(ByteOrder.nativeOrder()).put(bytes).apply { rewind() }
++            }
++        }
++        return try {
++            context.assets.open(name).use { input ->
++                val bytes = input.readBytes()
++                if (bytes.isEmpty()) return null
++                ByteBuffer.allocateDirect(bytes.size)
++                    .order(ByteOrder.nativeOrder()).put(bytes).apply { rewind() }
++            }
++        } catch (_: Throwable) { null }
++    }
++
++    private fun buildInterpreter(buffer: ByteBuffer, forceCpu: Boolean = false): Interpreter {
++        val opts = Interpreter.Options()
++        if (!forceCpu) {
++            try {
++                val cl = CompatibilityList()
++                if (cl.isDelegateSupportedOnThisDevice) {
++                    gpuDelegate = GpuDelegate()
++                    opts.addDelegate(gpuDelegate)
++                } else {
++                    opts.setNumThreads(2)
++                }
++            } catch (t: Throwable) {
++                Log.w(tag, "GPU init failed; CPU fallback", t)
++                opts.setNumThreads(2)
++            }
++        } else {
++            opts.setNumThreads(2)
++        }
++        return try {
++            Interpreter(buffer, opts)
++        } catch (t: Throwable) {
++            Log.w(tag, "Interp build failed; CPU retry", t)
++            try { gpuDelegate?.close() } catch (_: Throwable) {}
++            gpuDelegate = null
++            Interpreter(buffer, Interpreter.Options().setNumThreads(2))
++        }
++    }
++
++    // ── detection ──────────────────────────────────────────────────────────
++
++    /** Legacy combined-classifier block (with grid voting for large images). */
++    suspend fun isUnsafe(bitmap: Bitmap): Boolean {
++        val interp = legacyInterpreter ?: return false
++        return inferenceLock.withLock {
++            try {
++                if (!isImageComplex(bitmap)) return@withLock false
++
++                val threshold = config.aiThreshold.coerceAtLeast(0.80f)
++                val voteNeeded = (config.gridVoteCount + 1).coerceAtMost(4)
++
++                val fullScore = extractGuardianScore(
++                    runInferenceSafe(interp, bitmap) ?: return@withLock false
++                )
++
++                if (fullScore < threshold * 0.3f) return@withLock false
++                if (fullScore >= threshold) return@withLock true
++
++                if (bitmap.width < 500 || bitmap.height < 500) {
++                    return@withLock fullScore >= threshold
++                }
++
++                val regions = splitIntoOverlappingGrid(bitmap, cols = 4, rows = 5, overlapPercent = 0.25f)
++                var triggeredCount = 0
++                for (region in regions) {
++                    if (!isImageComplex(region)) {
++                        region.recycle()
++                        continue
++                    }
++                    try {
++                        val out = runInferenceSafe(interp, region) ?: continue
++                        val score = extractGuardianScore(out)
++                        if (score >= threshold) triggeredCount++
++                        if (triggeredCount >= voteNeeded) break
++                    } catch (t: Throwable) {
++                        Log.e(tag, "Grid error", t)
++                    } finally {
++                        region.recycle()
++                    }
++                }
++                triggeredCount >= voteNeeded
++            } catch (t: Throwable) {
++                Log.e(tag, "isUnsafe failed", t)
++                false
++            }
++        }
++    }
++
++    /**
++     * Opposite-gender NSFW block: NSFW gate first, then gender confidence.
++     * requireStrongNsfw=true (full-screen scans) raises the NSFW gate to
++     * [GuardianConstants.FULL_SCREEN_NSFW_GATE].
++     */
++    suspend fun isOppositeGenderNsfw(
++        bitmap: Bitmap,
++        userGender: String,
++        requireStrongNsfw: Boolean = false
++    ): Boolean {
++        val nsfw = nsfwInterpreter ?: return false
++        val gender = genderInterpreter ?: return false
++        if (userGender != "MALE" && userGender != "FEMALE") return false
++
++        return inferenceLock.withLock {
++            try {
++                if (!isImageComplex(bitmap)) return@withLock false
++
++                val currentGender = config.userGender
++                    .let { if (it == "MALE" || it == "FEMALE") it else userGender }
++                if (currentGender != "MALE" && currentGender != "FEMALE") return@withLock false
++
++                val nsfwGate = if (requireStrongNsfw) {
++                    maxOf(config.nsfwGateThreshold, GuardianConstants.FULL_SCREEN_NSFW_GATE)
++                } else {
++                    config.nsfwGateThreshold
++                }
++                val genderConf = config.genderThreshold
++                val voteNeeded = config.gridVoteCount
++
++                val initial = runInferenceSafe(nsfw, bitmap) ?: return@withLock false
++                var maxNsfwScore = extractNsfwGateScore(initial)
++
++                if (maxNsfwScore < nsfwGate) {
++                    if (bitmap.width >= 500 && bitmap.height >= 500) {
++                        val regions = splitIntoOverlappingGrid(bitmap, cols = 4, rows = 5, overlapPercent = 0.25f)
++                        var nsfwVotes = 0
++                        for (region in regions) {
++                            if (!isImageComplex(region)) {
++                                region.recycle()
++                                continue
++                            }
++                            try {
++                                val out = runInferenceSafe(nsfw, region) ?: continue
++                                val score = extractNsfwGateScore(out)
++                                if (score > maxNsfwScore) maxNsfwScore = score
++                                if (score >= nsfwGate) nsfwVotes++
++                                if (nsfwVotes >= voteNeeded) break
++                            } catch (t: Throwable) {
++                                Log.e(tag, "NSFW grid error", t)
++                            } finally {
++                                region.recycle()
++                            }
++                        }
++                        if (maxNsfwScore < nsfwGate && nsfwVotes < voteNeeded) {
++                            return@withLock false
++                        }
++                    } else {
++                        return@withLock false
++                    }
++                }
++
++                val genderScores = runInferenceSafe(gender, bitmap) ?: return@withLock false
++                val half = genderScores.size / 2
++                val firstSum = genderScores.take(half).sum()
++                val secondSum = genderScores.drop(half).sum()
++                val total = (firstSum + secondSum).coerceAtLeast(0.001f)
++                val femaleProb = firstSum / total
++                val maleProb = secondSum / total
++
++                // Phase-1 false-block fix: always full gender confidence
++                // (the old "soft NSFW" 0.62 path is gone).
++                when (currentGender) {
++                    "MALE" -> femaleProb >= genderConf
++                    "FEMALE" -> maleProb >= genderConf
++                    else -> false
++                }
++            } catch (t: Throwable) {
++                Log.e(tag, "Gender NSFW failed", t)
++                false
++            }
++        }
++    }
++
++    // ── helpers ────────────────────────────────────────────────────────────
++
++    private fun splitIntoOverlappingGrid(
++        bitmap: Bitmap,
++        cols: Int,
++        rows: Int,
++        overlapPercent: Float = 0f
++    ): List<Bitmap> {
++        val regions = mutableListOf<Bitmap>()
++        val w = bitmap.width
++        val h = bitmap.height
++        val cellW = w / cols
++        val cellH = h / rows
++        val stepX = (cellW * (1f - overlapPercent)).toInt().coerceAtLeast(cellW / 2)
++        val stepY = (cellH * (1f - overlapPercent)).toInt().coerceAtLeast(cellH / 2)
++
++        var y = 0
++        while (y < h) {
++            val currentH = if (y + cellH > h) h - y else cellH
++            if (currentH < 64) break
++            var x = 0
++            while (x < w) {
++                val currentW = if (x + cellW > w) w - x else cellW
++                if (currentW < 64) break
++                runCatching {
++                    regions.add(Bitmap.createBitmap(bitmap, x, y, currentW, currentH))
++                }.onFailure { Log.e(tag, "Grid crop at $x,$y", it) }
++                if (x + cellW >= w) break
++                x += stepX
++                if (x + cellW > w) x = w - cellW
++            }
++            if (y + cellH >= h) break
++            y += stepY
++            if (y + cellH > h) y = h - cellH
++        }
++        return regions
++    }
++
++    private fun extractGuardianScore(scores: FloatArray): Float {
++        return when (scores.size) {
++            1 -> scores[0]
++            2 -> scores[1]
++            3 -> (scores.getOrElse(1) { 0f } + scores.getOrElse(2) { 0f }).coerceAtMost(1.0f)
++            5 -> maxOf(scores.getOrElse(1) { 0f }, scores.getOrElse(3) { 0f }, scores.getOrElse(4) { 0f })
++            else -> scores.drop(1).max()
++        }
++    }
++
++    private fun extractNsfwGateScore(scores: FloatArray): Float {
++        return when (scores.size) {
++            1 -> scores[0]
++            2 -> scores[1]
++            5 -> maxOf(scores.getOrElse(1) { 0f }, scores.getOrElse(3) { 0f }, scores.getOrElse(4) { 0f })
++            else -> scores.drop(1).max()
++        }
++    }
++
++    private fun isImageComplex(bitmap: Bitmap): Boolean {
++        val w = bitmap.width
++        val h = bitmap.height
++        if (w < 64 || h < 64) return false
++        val stepX = (w / 8).coerceAtLeast(1)
++        val stepY = (h / 8).coerceAtLeast(1)
++        var count = 0
++        var sumL = 0.0
++        var sumL2 = 0.0
++        var y = stepY
++        while (y < h) {
++            var x = stepX
++            while (x < w) {
++                val pixel = bitmap.getPixel(x, y)
++                val r = (pixel shr 16) and 0xff
++                val g = (pixel shr 8) and 0xff
++                val b = pixel and 0xff
++                val luma = 0.299 * r + 0.587 * g + 0.114 * b
++                sumL += luma
++                sumL2 += luma * luma
++                count++
++                x += stepX
++            }
++            y += stepY
++        }
++        if (count == 0) return false
++        val avgL = sumL / count
++        val variance = (sumL2 / count) - (avgL * avgL)
++        return variance in 200.0..8500.0
++    }
++
++    private fun runInferenceSafe(interp: Interpreter, bitmap: Bitmap): FloatArray? {
++        return try {
++            val result = runInference(interp, bitmap)
++            consecutiveInferenceFails = 0
++            result
++        } catch (t: Throwable) {
++            consecutiveInferenceFails++
++            Log.w(tag, "Inference failed (streak=$consecutiveInferenceFails)", t)
++            if (consecutiveInferenceFails >= inferenceFailThreshold) {
++                rebuildAllOnCpu()
++            }
++            null
++        }
++    }
++
++    private fun rebuildAllOnCpu() {
++        try {
++            Log.w(tag, "Rebuilding AI interpreters on CPU after $consecutiveInferenceFails failures")
++            reloadModels()
++            legacyInterpreter = tryLoad(GuardianConstants.MODEL_LEGACY, forceCpu = true)
++            nsfwInterpreter = tryLoad(GuardianConstants.MODEL_NSFW, forceCpu = true)
++            genderInterpreter = tryLoad(GuardianConstants.MODEL_GENDER, forceCpu = true)
++            consecutiveInferenceFails = 0
++        } catch (t: Throwable) {
++            Log.e(tag, "rebuildAllOnCpu failed", t)
++        }
++    }
++
++    private fun runInference(interp: Interpreter, bitmap: Bitmap): FloatArray {
++        val inputShape = interp.getInputTensor(0).shape()
++        val h = inputShape.getOrNull(1) ?: 224
++        val w = inputShape.getOrNull(2) ?: 224
++
++        val bufferSize = 4 * w * h * 3
++        val currentInput = inputBuffer.takeIf { it?.capacity() == bufferSize }
++            ?: ByteBuffer.allocateDirect(bufferSize).order(ByteOrder.nativeOrder()).also { inputBuffer = it }
++
++        val pixelCount = w * h
++        val currentPixels = pixelsArray.takeIf { it?.size == pixelCount }
++            ?: IntArray(pixelCount).also { pixelsArray = it }
++
++        currentInput.rewind()
++
++        val resized = if (bitmap.width != w || bitmap.height != h) {
++            Bitmap.createScaledBitmap(bitmap, w, h, true)
++        } else {
++            bitmap
++        }
++
++        resized.getPixels(currentPixels, 0, w, 0, 0, w, h)
++
++        val inv255 = 1.0f / 255.0f
++        for (p in currentPixels) {
++            currentInput.putFloat(((p shr 16) and 0xFF) * inv255)
++            currentInput.putFloat(((p shr 8) and 0xFF) * inv255)
++            currentInput.putFloat((p and 0xFF) * inv255)
++        }
++        currentInput.rewind()
++
++        if (resized !== bitmap) resized.recycle()
++
++        val outShape = interp.getOutputTensor(0).shape()
++        val outSize = outShape.last()
++        val output = Array(1) { FloatArray(outSize) }
++        interp.run(currentInput, output)
++        return output[0]
++    }
++
++    companion object {
++        @Volatile
++        private var instance: GuardianAiDetector? = null
++
++        fun get(context: Context): GuardianAiDetector =
++            instance ?: synchronized(this) {
++                instance ?: GuardianAiDetector(context.applicationContext)
++                    .also { instance = it }
++            }
++    }
++}
+diff --git a/app/src/main/java/neth/iecal/curbox/guardian/GuardianConstants.kt b/app/src/main/java/neth/iecal/curbox/guardian/GuardianConstants.kt
+new file mode 100644
+index 0000000..bd10861
+--- /dev/null
++++ b/app/src/main/java/neth/iecal/curbox/guardian/GuardianConstants.kt
+@@ -0,0 +1,32 @@
++package neth.iecal.curbox.guardian
++
++/**
++ * Guardian (NSFW content blocking) — detection constants.
++ * Ported from Dogs-of-KAHAF / Guardian Shield, adapted to the Curbox style
++ * (no Hilt, no Timber). Phase-1 false-block fixes are already applied:
++ * the "soft NSFW" gender-lowering constant is gone — opposite-gender blocking
++ * always requires the full gender confidence.
++ */
++object GuardianConstants {
++    // NSFW gate threshold (max strategy on the NSFW model's unsafe indices).
++    const val NSFW_GATE_THRESHOLD = 0.68f
++
++    // Gender confidence threshold for opposite-gender blocking.
++    const val GENDER_CONFIDENCE_THRESHOLD = 0.78f
++
++    // Legacy combined classifier default threshold (user adjustable).
++    const val LEGACY_THRESHOLD_DEFAULT = 0.72f
++
++    // Full-screen screenshots are noisy (UI chrome/text/many small images), so
++    // the full-screen path requires a STRONGER NSFW gate before the gender
++    // model is consulted. Content-region scans keep the normal gate.
++    const val FULL_SCREEN_NSFW_GATE = 0.80f
++
++    // Model files (imported into filesDir via GuardianModelImportManager).
++    const val MODEL_LEGACY = "guardian_model.tflite"
++    const val MODEL_NSFW = "nsfw_model.tflite"
++    const val MODEL_GENDER = "gender_model.tflite"
++
++    // Import size ceiling.
++    const val MAX_MODEL_BYTES = 500L * 1024 * 1024
++}
+diff --git a/app/src/main/java/neth/iecal/curbox/guardian/GuardianKeywordMatcher.kt b/app/src/main/java/neth/iecal/curbox/guardian/GuardianKeywordMatcher.kt
+new file mode 100644
+index 0000000..404cefa
+--- /dev/null
++++ b/app/src/main/java/neth/iecal/curbox/guardian/GuardianKeywordMatcher.kt
+@@ -0,0 +1,56 @@
++package neth.iecal.curbox.guardian
++
++import java.util.regex.Pattern
++
++/**
++ * Keyword / regex matcher for text-based NSFW detection.
++ *
++ * Ported from Dogs-of-KAHAF `RulesEngine.evaluateText`, with the Phase-1
++ * false-block fix: regex keywords are wrapped in word boundaries unless the
++ * user already anchored them, so a keyword like "sex" cannot match inside
++ * "Essex" / "sextant".
++ *
++ * Pure logic — no Android dependencies (unit-testable on the JVM).
++ */
++object GuardianKeywordMatcher {
++
++    sealed class Result {
++        object Allow : Result()
++        data class Block(val matched: String) : Result()
++    }
++
++    /**
++     * @param rules list of (pattern, isRegex) pairs.
++     * @param text  visible text collected from the accessibility tree.
++     */
++    fun evaluate(text: String, rules: List<Pair<String, Boolean>>): Result {
++        if (text.isBlank() || text.length < 2) return Result.Allow
++        for ((kw, isRegex) in rules) {
++            try {
++                if (isRegex) {
++                    // FALSE-BLOCK FIX: bare user regexes get word boundaries so a
++                    // keyword can't match inside a larger word. Regexes the user
++                    // already anchored (^, $, \b, \B) keep their exact semantics.
++                    val raw = kw.trim()
++                    val alreadyAnchored = raw.contains('^') || raw.contains('$') ||
++                        raw.startsWith("\\b") || raw.startsWith("\\B")
++                    val pattern = if (alreadyAnchored) raw else "(?iu)\\b(?:$raw)\\b"
++                    if (Pattern.compile(pattern, Pattern.CASE_INSENSITIVE or Pattern.UNICODE_CASE)
++                            .matcher(text).find()) {
++                        return Result.Block(kw)
++                    }
++                } else {
++                    // Plain keywords: exact word-boundary match (same semantics
++                    // as the original non-regex path).
++                    val pattern = "(?iu)\\b${Pattern.quote(kw)}\\b"
++                    if (Pattern.compile(pattern).matcher(text).find()) {
++                        return Result.Block(kw)
++                    }
++                }
++            } catch (_: Throwable) {
++                // invalid regex — skip, don't crash the scan
++            }
++        }
++        return Result.Allow
++    }
++}
+diff --git a/app/src/main/java/neth/iecal/curbox/guardian/GuardianModelImportManager.kt b/app/src/main/java/neth/iecal/curbox/guardian/GuardianModelImportManager.kt
+new file mode 100644
+index 0000000..68d09ec
+--- /dev/null
++++ b/app/src/main/java/neth/iecal/curbox/guardian/GuardianModelImportManager.kt
+@@ -0,0 +1,111 @@
++package neth.iecal.curbox.guardian
++
++import android.content.Context
++import android.net.Uri
++import kotlinx.coroutines.Dispatchers
++import kotlinx.coroutines.flow.MutableStateFlow
++import kotlinx.coroutines.flow.StateFlow
++import kotlinx.coroutines.flow.asStateFlow
++import kotlinx.coroutines.withContext
++import java.io.File
++
++/** Import progress for the model-import settings screen. */
++sealed class GuardianImportProgress {
++    data object Idle : GuardianImportProgress()
++    data class Working(val percent: Int) : GuardianImportProgress()
++    data class Success(val modelName: String, val sizeBytes: Long) : GuardianImportProgress()
++    data class Error(val modelName: String, val message: String) : GuardianImportProgress()
++}
++
++/**
++ * Copies a user-picked .tflite file into filesDir so GuardianAiDetector can load it.
++ * Ported from Dogs-of-KAHAF `ModelImportManager`, adapted to Curbox style
++ * (no Hilt — plain class with an app-scoped singleton holder).
++ */
++class GuardianModelImportManager(private val context: Context) {
++
++    private val _progress = MutableStateFlow<GuardianImportProgress>(GuardianImportProgress.Idle)
++    val progress: StateFlow<GuardianImportProgress> = _progress.asStateFlow()
++
++    suspend fun importModel(uri: Uri, modelName: String): Result<File> =
++        withContext(Dispatchers.IO) {
++            _progress.value = GuardianImportProgress.Working(0)
++            try {
++                val finalFile = File(context.filesDir, modelName)
++                val tmp = File(context.filesDir, "$modelName.tmp")
++
++                context.contentResolver.openInputStream(uri).use { input ->
++                    if (input == null) {
++                        val msg = "Cannot open file — try a different file manager"
++                        _progress.value = GuardianImportProgress.Error(modelName, msg)
++                        return@withContext Result.failure(IllegalStateException(msg))
++                    }
++                    tmp.outputStream().use { out ->
++                        val buf = ByteArray(64 * 1024)
++                        var total = 0L
++                        val max = GuardianConstants.MAX_MODEL_BYTES
++                        while (true) {
++                            val n = input.read(buf)
++                            if (n <= 0) break
++                            total += n
++                            if (total > max) {
++                                tmp.delete()
++                                val msg = "File too large (max 500 MB)"
++                                _progress.value = GuardianImportProgress.Error(modelName, msg)
++                                return@withContext Result.failure(IllegalStateException(msg))
++                            }
++                            out.write(buf, 0, n)
++                            _progress.value = GuardianImportProgress.Working(
++                                ((total * 100) / max).toInt().coerceAtMost(99)
++                            )
++                        }
++                    }
++                }
++
++                if (tmp.length() < 1024) {
++                    tmp.delete()
++                    val msg = "File too small — not a valid model"
++                    _progress.value = GuardianImportProgress.Error(modelName, msg)
++                    return@withContext Result.failure(IllegalStateException(msg))
++                }
++
++                if (finalFile.exists()) finalFile.delete()
++                if (!tmp.renameTo(finalFile)) {
++                    tmp.copyTo(finalFile, overwrite = true)
++                    tmp.delete()
++                }
++                _progress.value = GuardianImportProgress.Success(modelName, finalFile.length())
++                Result.success(finalFile)
++            } catch (t: Throwable) {
++                _progress.value =
++                    GuardianImportProgress.Error(modelName, t.message ?: "error")
++                Result.failure(t)
++            }
++        }
++
++    fun isModelImported(modelName: String): Boolean {
++        val f = File(context.filesDir, modelName)
++        return f.exists() && f.length() > 0
++    }
++
++    fun modelSizeBytes(modelName: String): Long {
++        val f = File(context.filesDir, modelName)
++        return if (f.exists()) f.length() else 0L
++    }
++
++    fun deleteModel(modelName: String): Boolean {
++        val f = File(context.filesDir, modelName)
++        return if (f.exists()) f.delete() else false
++    }
++
++    companion object {
++        @Volatile
++        private var instance: GuardianModelImportManager? = null
++
++        fun get(context: Context): GuardianModelImportManager =
++            instance ?: synchronized(this) {
++                instance ?: GuardianModelImportManager(context.applicationContext)
++                    .also { instance = it }
++            }
++    }
++}
+diff --git a/gradle/libs.versions.toml b/gradle/libs.versions.toml
+index c482aff..7ae410c 100644
+--- a/gradle/libs.versions.toml
++++ b/gradle/libs.versions.toml
+@@ -23,6 +23,7 @@ okhttp = "4.12.0"
+ securityCrypto = "1.1.0-alpha06"
+ work = "2.9.1"
+ coroutines = "1.7.3"
++tflite = "2.16.1"
+ 
+ [libraries]
+ okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
+@@ -49,6 +50,8 @@ androidx-constraintlayout = { group = "androidx.constraintlayout", name = "const
+ mpandroidchart = { module = "com.github.PhilJay:MPAndroidChart", version.ref = "mpandroidchart" }
+ provider = { module = "dev.rikka.shizuku:provider", version.ref = "api" }
+ timerangepicker = { module = "nl.joery.timerangepicker:timerangepicker", version.ref = "timerangepicker" }
++tensorflow-lite = { module = "org.tensorflow:tensorflow-lite", version.ref = "tflite" }
++tensorflow-lite-gpu = { module = "org.tensorflow:tensorflow-lite-gpu", version.ref = "tflite" }
+ 
+ [plugins]
+ android-application = { id = "com.android.application", version.ref = "agp" }

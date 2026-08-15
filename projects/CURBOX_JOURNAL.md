@@ -122,3 +122,61 @@ User report: "onek besi false block kore"। Code-এ ৬টা স্পষ্�
 - Regex semantics verified with equivalent harness. **No Android build in sandbox — user must run ./gradlew assembleDebug.**
 - PR body + patch: drive `pr/falseblock_fix.patch` + `pr/PR_BODY_falseblock_fix.md`.
 - Next: user PR → merge → device test. Then Phase 2 (curbox integration) plan.
+
+---
+
+## 11. PHASE 2 — DOK-ai = MAIN APP (user decision)
+
+**Repo:** https://github.com/ferdausfs/DOK-ai ("second version of Dog's of Kahaf", public, empty)।
+**Decision:** এখানেই সব হবে — curbox UI/theme + Dogs-of-KAHAF-এর NSFW feature = DOK-ai।
+
+### Integration surface analysis (দুটো codebase ম্যাপ)
+- **curbox-এ যা আগে থেকেই আছে** (port করতে হবে না): AppBlocker, KeywordBlocker, ReelBlocker,
+  AntiUninstallBlocker, FocusModeBlocker, UI/theme/settings/focus infra, uihider, nfc।
+- **Dogs-of-KAHAF থেকে যা port করতে হবে** (curbox-এ নেই):
+  1. AI detection engine — `AiDetector.kt` (3 TFLite: guardian/nsfw/gender + GPU/CPU + grid vote)
+     + `ModelImportManager.kt` (model import UI)
+  2. Content scan — accessibility event → screenshot → AI → block (curbox-এর AppBlockerService-এ merge)
+  3. `RulesEngine.kt` (NSFW keyword/regex + per-app block/whitelist + schedule) — curbox-এর
+     KeywordBlocker-এর সাথে মিলিয়ে/সম্প্রসারিত
+  4. Settings: AI threshold / NSFW gate / gender threshold / grid-vote sliders + gender select
+  5. Block overlay (AI-detection block screen) + Activity log
+- **False-block fix (Phase 1)** Dogs-of-KAHAF-এ merged (`e05d9c2d`) — DOK-ai-তে port করার সময়
+  ওই fix-গুলো বেসলাইনে রাখা হবে (soft-hybrid gone, requireStrongNsfw, regex \b)।
+
+### Milestones (প্রতিটা = একটা PR)
+- **M0 — Seed**: curbox base DOK-ai-তে (user action, নিচে command)।
+- **M1 — AI engine port**: AiDetector + ModelImportManager + TFLite deps (pure logic, UI ছাড়া)।
+- **M2 — Service merge**: curbox AppBlockerService-এ content-scan hook (agents.md invariants মানতে হবে:
+  feature-fail-এ crash নয়, CrashLogger.logNonFatalError)।
+- **M3 — Settings UI**: curbox-এর reducer pattern-এ "Guardian AI" reducer (threshold sliders, gender, keywords)।
+- **M4 — Overlay + log**: AI-block overlay + activity log (curbox-এর existing overlay/UI reuse)।
+- **M5 — Device test + tune**: build/install, false-block vs miss balance।
+
+### License note (honest)
+- Curbox = GPL-3.0 → DOK-ai (curbox-ভিত্তিক) অবশ্যই **GPL-3.0** রাখতে হবে। User-এর নিজের
+  Dogs-of-KAHAF কোড (Personal use) নিজেরই, তাই relicense-এ সমস্যা নেই।
+- Build/compile sandbox-এ নেই → প্রতিটা milestone user-এর machine/CI-তে build হবে।
+
+---
+
+## 12. M0 DONE — DOK-ai seeded
+
+- DOK-ai main = `a50fe7bf` "Initial: Curbox base (screen-time manager) — GPL-3.0" (verified via GitHub API)।
+- Method: working-tree tarball (git history-র network problem এড়াতে) → local commit → force push।
+- Root-এ .github, app, gradle, LICENSE, settings.gradle.kts — curbox-এর full structure।
+- **M1 next:** Dogs-of-KAHAF-এর AI detection engine (AiDetector + ModelImportManager + RulesEngine + TFLite deps)
+  DOK-ai-তে port (package adapt: com.guardian.shield → DOK-ai namespace)।
+
+---
+
+## 13. M1 DONE — AI detection engine ported to DOK-ai (PR-ready)
+
+- DOK-ai main (`a50fe7bf`) থেকে branch `feat/guardian-m1-ai-engine`।
+- **4 new files** `neth.iecal.curbox.guardian/`: GuardianConstants, GuardianKeywordMatcher (pure logic),
+  GuardianModelImportManager, GuardianAiDetector (TFLite core) + TFLite gradle deps।
+- **Phase-1 false-block fixes বেসলাইনে রাখা** (soft-hybrid gone, requireStrongNsfw, regex \b)।
+- **Adaptation:** Hilt→plain singleton, Timber→Log, GuardianPreferences→GuardianConfig (M3-তে DataStore wire)।
+- patch: drive `pr/m1_ai_engine.patch` (sha 803748c6…), PR body `pr/PR_BODY_m1_ai_engine.md`।
+- ⚠️ Compile হয়নি (Android SDK নেই sandbox-এ) — user merge-এর পর CI build; syntax error হলে আমি ঠিক করবো।
+- **Next M2:** accessibility service-এ content-scan hook (screenshot → region scan → block)।
