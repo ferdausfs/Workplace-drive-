@@ -281,3 +281,15 @@ User report: "onek besi false block kore"। Code-এ ৬টা স্পষ্�
 - **Verify:** brace/paren 0 (৪ file), XML valid, dangling gender/nsfw refs = 0। ⚠️ compile=CI।
 - patch: `pr/v240_safeunsafe.patch` (sha 5b525591…), PR body `pr/PR_BODY_v240_safeunsafe.md`।
 - **Next:** merge → CI build → device test → threshold tune (slider-ই এখন, floor নেই)।
+
+---
+
+## 22. v2.4.0 patch re-based (PR #16 merge → base moved) — 2026-08-15
+
+- **PR #16 (CI release fix) merged** → `main` = `a2af6372` (build.yml dynamic tag ✅; v2.3.1 tag/release auto-created)।
+- **"PR হলো না" কারণ:** আগের v2.4.0 patch-এ build.yml hunk ছিল, কিন্তু ওই change main-এ already আছে →
+  `git apply` fail। Patch stale।
+- **Fix:** build.yml বাদ দিয়ে 7-file patch regenerate — `pr/v240_safeunsafe_v2.patch` (sha dd988e5c…), +17/−517।
+- **Verify:** `git apply --check` OK on base (e05d9c2 + merged ci_fix.patch = a2af6372-equivalent)। brace/paren 0, XML valid, dangling refs 0। ⚠️ compile=CI।
+- PR body: `pr/PR_BODY_v240_safeunsafe_v2.md`। Branch `feat/v240-safeunsafe` GitHub-এ empty (== main) → delete করে fresh push।
+- **Next:** apply → push → PR → merge → CI → device test → threshold tune (slider-ই এখন, floor নেই)।
