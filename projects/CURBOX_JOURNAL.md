@@ -311,3 +311,21 @@ User report: "onek besi false block kore"। Code-এ ৬টা স্পষ্�
   brace/paren 0 ✅। ⚠️ compile=CI।
 - patch: `pr/v241_drawing_gate.patch` (sha fe4133dd…), PR body `pr/PR_BODY_v241_drawing_gate.md`।
 - **Next:** merge → CI build → device test (cartoon + photo NSFW + anime hentai) → log-ভিত্তিক tune।
+
+---
+
+## 24. v2.4.2 — precision-first scoring (cat/cartoon/safe false-block fix) — 2026-08-16
+
+- **User report (v2.4.1-পরেও):** YouTube-এ cat video block, safe content block, cat cartoon/AI cartoon block।
+- **Root cause (code):** Drawing-gate শুধু Hentai-vs-Drawing; cat/fur/গায়ের রং → NSFWJS "Sexy"/"Porn"
+  মাঝারি score (0.4–0.7)। Service `runContentAwareScan` video surface + thumbnails-এ প্রতিটা region-এ
+  isUnsafe চালায়; grid (4×5) noisy Sexy-কে amplify করে threshold 0.65 পার করিয়ে block।
+- **Fix:** `danger = (Porn+Sexy+Hentai) − (Neutral+Drawing)`; score = (danger+1)/2। score<0.55 → safe (no grid);
+  grid vote bar 0.80। diagnostic log `Guardian out[N]=...` (model size+raw score reveal)।
+- **Sim verify:** cat 0.42 SAFE · cat cartoon 0.10 SAFE · AI cartoon 0.12 SAFE · porn 0.96 BLOCK ·
+  hentai 0.90 BLOCK · lingerie 0.94 BLOCK।
+- **Trade-off:** precision↑ recall↓ (ছোট thumbnail NSFW miss-এর সম্ভাবনা; full-screen ঠিকই)। model=5-class
+  NSFWJS ধরে নেওয়া; না হলে log-ভিত্তিক fix।
+- **Verify:** apply-check OK on 2a9e8135 ✅ brace/paren 0 ✅ compile=CI। patch `pr/v242_precision_first.patch`
+  (sha e4ebcdea…), PR body `pr/PR_BODY_v242_precision_first.md`।
+- **Next:** merge → CI → device test (cat/cartoon + real NSFW) → log পাঠালে model size confirm।
