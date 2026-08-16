@@ -329,3 +329,37 @@ User report: "onek besi false block kore"। Code-এ ৬টা স্পষ্�
 - **Verify:** apply-check OK on 2a9e8135 ✅ brace/paren 0 ✅ compile=CI। patch `pr/v242_precision_first.patch`
   (sha e4ebcdea…), PR body `pr/PR_BODY_v242_precision_first.md`।
 - **Next:** merge → CI → device test (cat/cartoon + real NSFW) → log পাঠালে model size confirm।
+
+---
+
+## 25. Workspace cleanup + FTT daily checkup (2026-08-16)
+
+- **v2.4.2 merged (PR #19)** → Dogs-of-KAHAF main `9cc1a6c5`, tag v2.4.2 released ✅ (precision-first live)।
+- **FTT daily checkup (infra, sandbox-থেকে):** সব healthy —
+  - Worker `fttotcv6.umuhammadiswa.workers.dev`: healthy v6.10.4; apiKeys 17/17, quota today 330;
+    push enabled + token valid (@fttbotbot), delivered 26/24h; subscriber 8429957782 OK (watchlist 6,
+    minConf 60); last push 03:00:44Z ADA/USD SELL (pushed 1/matched 1, no error); scan fresh (~05:10Z,
+    14 pairs, 300s interval); news blackout none; **forex CLOSED (রবিবার/weekend)**, crypto 24/7।
+  - Bot: live v4.5.1 ✅।
+  - Repos: worker main `d6c04460` (no drift), bot main `b2e7f331` (no drift), 0 open PR ✅।
+- **Phase F daily = phone-side** (data সেখানে): `phase_f_snapshot.sh`, `entryhit_corrected_analysis.py`,
+  `day3_analysis.py`, `d4_run.py`। Forward WR 44.3% (breakeven 55.6% এখনো clear না) — research item।
+- **Workspace cleanup:** শুধু uploads/ (user files) + journal + runbook রাখা; Dogs-of-KAHAF clone,
+  পুরনো patch/PR body/sync scripts, drive clone-এর বাকি সব মুছে ফেলা। re-clone (git clone https) verified OK।
+- **নিয়ম:** প্রতিবার যা লাগে re-derive/re-clone; কোনো file-এর push confirmed হলে সেটা clean।
+
+---
+
+## 26. Phase F daily checkup (sandbox, drive data) — 2026-08-16
+
+- **User request:** drive-এ data আছে → sandbox-এ analysis চালাও ("আজকেরটাই দেখো")।
+- **Data:** drive `data/` tarballs (FULL 08-12 + 08-14, 08-15) → 26 দিন, 6,213 signals (dedup), 5,997 decided।
+  আজকের (08-16) snapshot এখনো push হয়নি; latest = 08-15 (Saturday, weekend → n=5)।
+- **Results (scripts:** entryhit_corrected_analysis.py, d4_run.py, custom full_analysis.py):
+  - Full forward WR **43.5%** (CI 42.3–44.8) — breakeven 55.6% ❌
+  - Era: PRE 41.8% (n=4462) → **POST-FIX-EH 48.6%** (n=1535, +6.8pp) → last 7d 49.6% (n=957) — improvement real, breakeven নয়।
+  - Per-day: 08-11 56.4%, 08-12 58.3% (breakeven-এর উপরে, ছোট n); 08-14 54.2%; 08-15 n=5 (weekend)।
+  - FIX-EH: eh-MISS WR 53.0% (≠100%) → tautology ভাঙা ✅; entryHit selector-ও নয় (HIT 47.9% vs MISS 53.0%)।
+  - D4 ML: LEGIT confident-only 47.4% (CI 32.5–62.7) → no edge; leakage diagnostic 59.7% (fake edge only)।
+- **Report:** `reports/PHASE_F_DAILY_2026-08-16.md` (sync script-এ যাচ্ছে)।
+- **Verdict:** system better but not profitable; aiAgreed/grade/entryHit কেউ reliable selector না; Mon 08-17 snapshot পর্যন্ত নতুন কাজ না।
