@@ -293,3 +293,21 @@ User report: "onek besi false block kore"। Code-এ ৬টা স্পষ্�
 - **Verify:** `git apply --check` OK on base (e05d9c2 + merged ci_fix.patch = a2af6372-equivalent)। brace/paren 0, XML valid, dangling refs 0। ⚠️ compile=CI।
 - PR body: `pr/PR_BODY_v240_safeunsafe_v2.md`। Branch `feat/v240-safeunsafe` GitHub-এ empty (== main) → delete করে fresh push।
 - **Next:** apply → push → PR → merge → CI → device test → threshold tune (slider-ই এখন, floor নেই)।
+
+---
+
+## 23. v2.4.1 — cartoon false-block fix (Drawing-gate) — 2026-08-16
+
+- **User report:** v2.4.0 merge + device test-এর পরও cartoon block করে। "শুধু safe/unsafe 2-class model আছে কি?" জিজ্ঞেস করেছেন।
+- **Root cause (code):** v2.4.0-এ `extractGuardianScore` 5-class-এ শুধু `max(Hentai,Porn,Sexy)` — NSFWJS-এর
+  **Drawing** (safe cartoon/anime) class ignore → cartoon frame-এ সামান্য Hentai score-এই block।
+- **Model প্রশ্নের honest answer:** 2-class off-the-shelf on-device model নেই যা cartoon-এ ভালো হবে।
+  OpenNSFW2 binary কিন্তু photo-trained → anime/cartoon-এ worse। NSFWJS-এর Drawing class-ই সঠিক tool;
+  model বদল নয়, Drawing use করাই fix।
+- **Fix:** `drawnNsfw = if (Hentai > Drawing) Hentai else 0`; `photoNsfw = max(Porn,Sexy)` direct;
+  score = max(photo, drawn)। + full-frame per-class debug log (D/H/N/P/S)। version 2.4.1 (code 10)।
+- **Trade-off:** Drawing ≥ Hentai ambiguous case এখন safe → anime-hentai edge miss-এর সামান্য risk (intentional, user priority)।
+- **Verify:** GitHub main 049c47ac AiDetector.kt byte-identical to base (curl diff) ✅; apply-check OK ✅;
+  brace/paren 0 ✅। ⚠️ compile=CI।
+- patch: `pr/v241_drawing_gate.patch` (sha fe4133dd…), PR body `pr/PR_BODY_v241_drawing_gate.md`।
+- **Next:** merge → CI build → device test (cartoon + photo NSFW + anime hentai) → log-ভিত্তিক tune।
