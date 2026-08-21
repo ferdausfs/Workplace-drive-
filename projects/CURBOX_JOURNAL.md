@@ -379,3 +379,22 @@ User report: "onek besi false block kore"। Code-এ ৬টা স্পষ্�
   - D4 ML: LEGIT confident-only 52.4% (CI 37.7–66.6) → no edge।
 - **Report:** `reports/PHASE_F_DAILY_2026-08-17.md`।
 - **Next:** 08-17 দিন শেষ হলে (UTC 08-18) আবার checkup; breakeven-clear হলে তবেই conditional strategy।
+
+---
+
+## 29. FTT profitability research + selectivity gate (PR-ready) — 2026-08-21
+
+- **User request:** "engine-টা profitable বানাও — accuracy বাড়াও, signal কম হলে সমস্যা নেই, indicator add/remove চলবে"।
+- **Method:** worker source (engine/voteFilters/grade/config) + 6,259 decided-এর full feature mining (bivariate + combo + chronological validation)।
+- **Findings:**
+  - Core directional WR 45-48% (breakeven 55.6%); D4 ML no edge (34.1%).
+  - **Grade inversion still real post-calib:** B 50.4% > C 46.5% > A+ 44.2% (confidence bucket non-monotone too)।
+  - **Structure verdict inverted (ranging artifact):** AGAINST 47.5% > ALIGNED 41.1%; baked into calibration (structWR AGAINST 0.497 > ALIGNED 0.423)।
+  - **aiAgreed adds nothing** (43.8% ≈ 43.4%)।
+  - **Real edges (signal-time):** PENDING_ENTRY 57.9% (n=178); entryDist≥0.1% 60.0% (95); ATR pctile<50 53.6% (289); CRYPTO 46.6% vs FOREX 34%; TRENDING 38.8%।
+  - entryHit=False 75% = post-hoc tautology — pre-trade filter নয় (FIX-EH-ই ঠিক করেছে)।
+- **Built: SELECTIVITY GATE** (push-only filter, history/API intact): cryptoOnly + excludeTrending + requirePendingEntry + maxAtrPercentile<50। Config-driven, fail-open, kill-switch।
+  - Patch `pr/ftt_worker_selectivity_gate.patch` (sha 0328d1c1…, 3 file, +97/−1)। node --check ✅, apply-check on d6c0446 ✅, 7-case gate test ✅।
+  - Expected: push-subset WR ~57-60% (point est), signal ~76% কম (~11/day)। CI wide — forward prove লাগবে।
+- **Report:** `reports/FTT_PROFITABILITY_RESEARCH_2026-08-21.md`; PR body `pr/PR_BODY_worker_selectivity_gate.md`।
+- **Next:** deploy → 1-2 week forward → tune params; FIX-A (regime-conditional calibration) আলাদা PR; নতুন indicator research আলাদা scope।
