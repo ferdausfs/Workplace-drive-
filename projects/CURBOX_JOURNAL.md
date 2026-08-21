@@ -363,3 +363,19 @@ User report: "onek besi false block kore"। Code-এ ৬টা স্পষ্�
   - D4 ML: LEGIT confident-only 47.4% (CI 32.5–62.7) → no edge; leakage diagnostic 59.7% (fake edge only)।
 - **Report:** `reports/PHASE_F_DAILY_2026-08-16.md` (sync script-এ যাচ্ছে)।
 - **Verdict:** system better but not profitable; aiAgreed/grade/entryHit কেউ reliable selector না; Mon 08-17 snapshot পর্যন্ত নতুন কাজ না।
+
+---
+
+## 27. Phase F daily checkup — 2026-08-17 (Monday, live pull from worker)
+
+- **নতুন ক্ষমতা:** sandbox থেকে worker API direct pull → snapshot phone ছাড়া; checkup-এর জন্য drive tarball push আর লাগে না (audit trail-এর জন্য চালু থাকবে)।
+- **Data:** live 18-pair × 500 signal (08-17 12:42 UTC) + drive tarballs, dedup by id → 6,099 decided।
+- **Results:**
+  - Full forward WR 43.5% (CI 42.3–44.8) — breakeven 55.6% ❌ (unchanged, expected)।
+  - POST-FIX-EH 48.4% (n=1637) ✅ improvement টিকে আছে; PRE 41.8%।
+  - **Last 7d 52.9% (CI 48.6–57.2)** — breakeven-এর দিকে, এখনো clear নয়।
+  - Per-day: 08-16 55.0% (n=40), 08-17 38.5% (n=39, intraday Monday)।
+  - FIX-EH: eh-MISS 52.2% → tautology ভাঙা ✅; entryHit selector নয়।
+  - D4 ML: LEGIT confident-only 52.4% (CI 37.7–66.6) → no edge।
+- **Report:** `reports/PHASE_F_DAILY_2026-08-17.md`।
+- **Next:** 08-17 দিন শেষ হলে (UTC 08-18) আবার checkup; breakeven-clear হলে তবেই conditional strategy।
