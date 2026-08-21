@@ -1,0 +1,33 @@
+diff --git a/src/handlers/health.js b/src/handlers/health.js
+index 81e950c..4f6ca86 100644
+--- a/src/handlers/health.js
++++ b/src/handlers/health.js
+@@ -27,7 +27,7 @@ export async function handleHealth(env) {
+   const phase10        = await getPushStats(env, { validateToken: true });        // Phase 10 push
+ 
+   return jsonResponse({
+-    status: 'healthy', version: '6.10.4', timestamp: new Date().toISOString(),
++    status: 'healthy', version: '6.11.0', timestamp: new Date().toISOString(),
+     apiKeys: { configured: keyCount, source: keySource, status: keyCount > 0 ? 'ready' : 'NO KEYS' },
+     apiKeysLoaded: keyCount,
+     quotaUsedToday,
+diff --git a/src/index.js b/src/index.js
+index 202b21d..99923c7 100644
+--- a/src/index.js
++++ b/src/index.js
+@@ -1,5 +1,5 @@
+ /**
+- * FTT Signal Worker v6.10.4
++ * FTT Signal Worker v6.11.0
+  * Cloudflare Worker Entry Point
+  */
+ 
+@@ -124,7 +124,7 @@ export default {
+       } else {
+         response = jsonResponse({
+           status: 'ok',
+-          message: 'FTT Signal Worker v6.10.4 — Forex + Crypto + OTC + History Tracking',
++          message: 'FTT Signal Worker v6.11.0 — Forex + Crypto + OTC + History Tracking',
+           endpoints: {
+             health:    '/',
+             signal:    '/api/signal?pair=EUR/USD',
