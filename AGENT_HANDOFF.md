@@ -12,6 +12,7 @@
 - **কোথায় আছি:** Distortion audit (D1-D6) প্রমাণিত হয়েছে → তার ৩টা ফিক্স (FIX-1/2/3) merge + deploy হয়েছে → **লাইভ v6.13.0** → এখন **২-৩ দিনের shadow window** চলছে (শুরু **2026-08-30T07:55Z**), যেখানে প্রতিটা crypto BUY/SELL-এ `empiricalConfidence` জমছে।
 - **পরের কংক্রিট কাজ:** **2026-09-01/09-02-তে** EC ladder validate করো (`python3 scripts/ec_shadow_validate.py`) → monotone হলে **এক-লাইনে `mode:'decision'` flip (v6.14.0)** → PR → merge → deploy → verify। পুরো runbook §৩-এ।
 - **সতর্কতা:** shadow উইন্ডোতে Telegram-এ যাওয়া সিগন্যাল **শেখার ডেটা, ট্রেড-কোয়ালিটি নয়** — ঐতিহাসিকভাবে-খারাপ স্লাইসও আসছে (ইচ্ছাকৃত, মাপার জন্য)। কোয়ালিটি কন্ট্রোল flip-এর পর ফিরবে (EC grade-ভিত্তিক)।
+- ⚡ **টোকেন স্ট্যাটাস (2026-08-31): GitHub PAT + CF token দুটোই revoke করা হয়েছে** (সিদ্ধান্ত: আগেই revoke, flip-এর দিন fresh দেওয়া হবে)। ভ্যালিডেশন চালাতে টোকেন লাগে না (public API), কিন্তু **flip + deploy-এর দিন user-এর কাছে fresh টোকেন চাওয়া হবে** (§৪, §৫-নিয়ম ১)। Worker টোকেন ছাড়াই চলছে, ডেটা জমছে।
 
 ---
 
@@ -86,7 +87,7 @@ curl -H 'User-Agent: Mozilla/5.0' https://fttotcv6.umuhammadiswa.workers.dev/hea
 
 ## ৫. কঠোর নিয়ম (ভাঙলে কাজ নষ্ট)
 
-1. **টোকেন নিরাপত্তা:** GitHub PAT / CF token **শুধু git push / deploy কমান্ডে** ব্যবহার হবে। কোনো ফাইলে, কমিটে, রিপোর্টে, এই ডকে — **কখনো না।** Decision-flip ফেজ শেষ হলে user-কে **দুটো টোকেনই revoke** করতে মনে করিয়ে দেবে।
+1. **টোকেন নিরাপত্তা:** GitHub PAT / CF token **শুধু git push / deploy কমান্ডে** ব্যবহার হবে। কোনো ফাইলে, কমিটে, রিপোর্টে, এই ডকে — **কখনো না।** **[2026-08-31 আপডেট:] পুরনো PAT + CF token user আগেই revoke করেছে (লাইভ 401 দিয়ে ভেরিফাইড; ডিস্ক থেকে ডেড কপি scrubbed)। Flip-এর দিন user থেকে fresh নেবে — scope: PAT-এ দুই repo-র push/PR merge; CF token Workers Scripts:Edit + account id। কাজ শেষে আবার revoke করাবে।**
 2. **প্রতি সেশনে রিপোর্ট push (RULES.md RULE-2):** কাজ শেষে dated রিপোর্ট `reports/`-এ + এই ফাইলের §৬-এ এক লাইন append + drive push। রিপোর্ট ছাড়া সেশন শেষ = context miss।
 3. **PR-first + টেস্ট:** সরাসরি main-এ কোড নয়; ৮টা suite green ছাড়া merge না। ইচ্ছাকৃত আউটপুট পরিবর্তন হলে r71-এর `BASELINE_COMMIT` refresh (F3-20 মেকানিজম)।
 4. **No invented data:** প্রতিটা সংখ্যা live API বা সেভ করা স্ন্যাপশট থেকে; নমুনা ছোট হলে Wilson CI সহ বলবে, দাবি ছোট রাখবে।
@@ -96,6 +97,7 @@ curl -H 'User-Agent: Mozilla/5.0' https://fttotcv6.umuhammadiswa.workers.dev/hea
 
 ## ৬. সেশন লগ (নতুন agent সবার নিচে append করবে)
 
+- **2026-08-31 — টোকেন রোটেশন:** user দুটো টোকেনই (GitHub PAT + CF) revoke করেছে — PAT লাইভ-টেস্টে **401 Bad credentials** কনফার্মড, CF টোকেন ডিস্কে ছিলই না (by design)। লোকাল স্ক্রিপ্ট থেকে ডেড PAT scrubbed (open_pr_*.py)। Flip-এর দিন fresh token দরকার হবে।
 - **2026-08-31 — v6.13.0 live check (ইউজার প্রশ্ন: "engine er ki obosta?"):** shadow start 2026-08-30T07:55Z; ~১০ঘ-এ ৪১টা EC-tagged crypto signal (~৯৫-১০০/দিন pace; গেট-এরা ছিল ৪-২৪/দিন); EC attach **১০০%**; TRENDING মিন্ট ফিরেছে (৪১% of POST); প্রাথমিক ল্যাডার **monotone** A+ 50% > A 50% > B 37.5% > C 18.8% (n ছোট, informational); TRENDING WR 12.5% (n=16) — পুরনো ব্লক কেন ছিল তা এখন সেলে মাপা হচ্ছে। রিপোর্ট: `SHADOW_WINDOW_STATUS_2026-08-31.md`
 - **2026-08-30 — deploy day:** PR #29/#30 merge → v6.12.0 deploy; ইউজার চ্যালেঞ্জ ("data na pele ki kore analysis korbe") → তদন্তে প্রমাণিত → FIX-3 (PR #31, merge c1065bf) → v6.13.0 deploy (`--fix-metadata`) → shadow window শুরু 07:55Z।
 - **2026-08-30 — audit day:** D1-D6 distortion audit (২টা রিপোর্ট drive-এ) → FIX-1 EC-V2 + FIX-2 RSI gate PR-ready।
