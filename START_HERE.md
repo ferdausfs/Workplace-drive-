@@ -1,5 +1,7 @@
 # 🏁 START HERE — FTT Workspace (2026-08-14)
 
+> ⚡ **[2026-08-31] সর্বশেষ লাইভ স্টেট + পরের কাজের runbook → root-এর `AGENT_HANDOFF.md`-এ পড়ো (rolling, প্রতি সেশনে আপডেট হয়)।** নিচের "Live state" 2026-08-14-এর — পুরনো ধরবে না।
+>
 > এই ফাইলটা drive repo-র root-এ — **যেকোনো নতুন agent/session প্রথমে এটা পড়বে।**
 > সব কাজের canonical record drive + GitHub-এ আছে।
 
