@@ -97,6 +97,8 @@ curl -H 'User-Agent: Mozilla/5.0' https://fttotcv6.umuhammadiswa.workers.dev/hea
 
 ## ৬. সেশন লগ (নতুন agent সবার নিচে append করবে)
 
+- **2026-08-31 — EC shadow day-1 interim validation:** 178 EC records (~89/দিন, decided 164)। ল্যাডার non-monotone (C 42.6% n=68 > B 36.8% n=76; A+ n=2) → **flip না, deploy না**। 🔍 মূল আবিষ্কার: structure সেল regime-নির্ভর — TRENDING+ALIGNED 28.8% (n=59) কিন্তু TRENDING+AGAINST 60.7% (n=28); RANGING-এ উল্টো — অথচ EC-তে regime সেল নেই → সম্ভাব্য পথ: 09-02-তে EC-v2.1 regime-split সেল প্যাচ (তখন fresh token) অথবা ল্যাডার ঠিক হলে সরাসরি flip। A+ ব্যান্ড প্রায় অজাগতিক (178-এ ২) → flip-এর আগে bands re-derive আবশ্যক। রিপোর্ট: `EC_SHADOW_VALIDATION_INTERIM_2026-08-31.md` (লোকাল কমিট — PAT revoked, fresh PAT পেলে push)।
+
 - **2026-08-31 — টোকেন রোটেশন:** user দুটো টোকেনই (GitHub PAT + CF) revoke করেছে — PAT লাইভ-টেস্টে **401 Bad credentials** কনফার্মড, CF টোকেন ডিস্কে ছিলই না (by design)। লোকাল স্ক্রিপ্ট থেকে ডেড PAT scrubbed (open_pr_*.py)। Flip-এর দিন fresh token দরকার হবে।
 - **2026-08-31 — v6.13.0 live check (ইউজার প্রশ্ন: "engine er ki obosta?"):** shadow start 2026-08-30T07:55Z; ~১০ঘ-এ ৪১টা EC-tagged crypto signal (~৯৫-১০০/দিন pace; গেট-এরা ছিল ৪-২৪/দিন); EC attach **১০০%**; TRENDING মিন্ট ফিরেছে (৪১% of POST); প্রাথমিক ল্যাডার **monotone** A+ 50% > A 50% > B 37.5% > C 18.8% (n ছোট, informational); TRENDING WR 12.5% (n=16) — পুরনো ব্লক কেন ছিল তা এখন সেলে মাপা হচ্ছে। রিপোর্ট: `SHADOW_WINDOW_STATUS_2026-08-31.md`
 - **2026-08-30 — deploy day:** PR #29/#30 merge → v6.12.0 deploy; ইউজার চ্যালেঞ্জ ("data na pele ki kore analysis korbe") → তদন্তে প্রমাণিত → FIX-3 (PR #31, merge c1065bf) → v6.13.0 deploy (`--fix-metadata`) → shadow window শুরু 07:55Z।
