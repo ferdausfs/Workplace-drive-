@@ -34,3 +34,15 @@
 3. Flip-gate অপরিবর্তিত: per-strategy WR ≥ 55.6% (n≥50) → voice; মোট WR ≥ 60% (n≥100, CI-lo>50%) → decision
 
 **নোট:** PAT revoke করা — এই রিপোর্ট + handoff §৬ এন্ট্রি লোকাল কমিটে আছে, push হবে পরের token উইন্ডোতে।
+
+---
+
+## সংযোজন — 2026-09-05 ভোর (~02:50 UTC): আজকের প্রথম চেক
+
+- আজ (০৯-০৫, ~৩ঘ বয়সী): 14 mint, 10 resolved → **0W/10L**। দুই উইন্ডো:
+  - 00:00–00:40Z: 3 LOSS (ETH BUY, AUD/USD-OTC BUY, XRP SELL) — hour-0 playbook-এর অনুমোদিত ঘণ্টা; health.lastAttempt প্রমাণ করে 00:00:15Z-এ ETH/USD BUY playbook push হয়েছে → LOSS (n=1)
+  - **02:00–02:40Z burst: 7 LOSS** — BTC/ETH/XRP/ADA একসাথে SELL = correlated burst; কিন্তু এই সময় **VETO_HOUR [1,2,3]**-এর ভেতরে → playbook চুপ ✓ (শেষ push 00:00Z, পরে কিছু নেই); এগুলো legacy stream-এর শেখার ডেটা
+- গতকাল (০৯-০৪) পূর্ণদিন: 235 mint, 229 resolved, 94W/135L = 41.0% (legacy প্রত্যাশিত রেঞ্জ)
+- ⚠️ **delivered24h = 28** — প্রেডিক্টেড ৫–১৫/দিনের ~২×; playbook প্রত্যাশার চেয়ে বেশি কথা বলছে — per-strategy WR দেখা না পর্যন্ত এটা নিয়ন্ত্রণহীন
+- Correlation risk প্রথমবার লাইভ প্রমাণিত: এক টিকে ৪ পেয়ারে SELL = আসলে ১টা বাজি — daily budget / per-minute push-cap প্রয়োজন (decision-mode ডিজাইনে ছিল, push-mode-এ নেই)
+- **অগ্রাধিকার:** `/api/v7summary` route — playbook-এর নিজের W/L এখনো বাইরে থেকে অদৃশ্য
